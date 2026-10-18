@@ -20,10 +20,12 @@ ExecStart=/usr/bin/amixer -q -c rockchiprk809 cset name='Playback Path' SPK
 # (checked by ear on a beta, 2026-10-06; a 9 dB lower DAC level did not change
 # the character, so it was level, not clipping).
 ExecStart=/usr/bin/amixer -q -c rockchiprk809 cset name='HP Output Gain' 3
-# And the DAC 6 dB down from the device tree's spk-volume (also reset by the path):
-# with the +9 dB above, the level chosen by ear on a beta, quacks and the trigger
-# sounds alike. 255 is 0 dB, about 0.37 dB a step.
-ExecStart=/usr/bin/amixer -q -c rockchiprk809 cset name='DAC Playback Volume' 236,236
+# And the DAC at the highest value the driver takes (also reset by the path). The
+# control reports 0..255 but refuses anything above 252 with EINVAL; about 0.37 dB
+# a step. The beta is still about 12 dB quieter than the zero3 at its maximum
+# (Seeed's speaker report, 2026-10-14), and quieter sounds thinner, so it gets all
+# of it: 236 left about 6 dB unused.
+ExecStart=/usr/bin/amixer -q -c rockchiprk809 cset name='DAC Playback Volume' 252,252
 
 [Install]
 WantedBy=multi-user.target
