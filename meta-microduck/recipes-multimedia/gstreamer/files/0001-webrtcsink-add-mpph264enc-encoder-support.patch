@@ -1,61 +1,34 @@
 From: Fabien Danieau <fabien.danieau@pollen-robotics.com>
 Subject: [PATCH] webrtcsink: add mpph264enc encoder support
 
-Add support for Rockchip's MPP hardware H.264 encoder, so that webrtcsink can
-drive it the way it drives every other encoder it knows: pick it without putting
-a software converter in front, and let congestion control move its bitrate.
+Add support for Rockchip's MPP hardware H.264 encoder, so that webrtcsink's
+congestion control can move its bitrate. Without it webrtcsink logs "Bitrate
+handling is not supported yet for mpph264enc" at every session and the link
+never adapts, which on wifi means dropped frames instead of lower quality.
 
-Modelled on `webrtcsink: add v4l2h264enc encoder support`, and touching the same
-five places -- the converter chain, configure_encoder, is_bitrate_supported, and
-the bitrate getter and setter. An encoder present in only some of them is worse
-than one in none: without the last three webrtcsink logs "Bitrate handling is
-not supported yet for mpph264enc" at every session and the link never adapts,
-which on wifi means dropped frames instead of lower quality.
+Modelled on `webrtcsink: add v4l2h264enc encoder support`: configure_encoder,
+is_bitrate_supported, and the bitrate getter and setter. The bitrate property
+is `bps`, in bits per second; MPP derives bps-min and bps-max from it when they
+are left at zero. `gop` is raised from its default of one keyframe per second,
+since webrtcsink requests keyframes via PLI.
 
-mpph264enc differs from the V4L2 encoder in two ways worth stating. It converts
-on the SoC's 2D engine (RGA) and accepts a dozen raw formats on its sink pad, so
-the right converter is none at all rather than a better one. And its bitrate
-property is `bps` rather than `bitrate`, in bits per second, with bps-min and
-bps-max derived by MPP when left at zero.
+The converter chain is deliberately left at the default videoconvert !
+videoscale. An earlier version of this patch replaced it with an identity, on
+the belief that it cost a CPU pass per frame; measured on the board, both
+elements run in passthrough and reuse the input buffer when the camera's format
+and size already suit the encoder. The identity also broke the DOWNSCALED
+mitigation mode: below 1 Mbps webrtcsink asks for 360p, and with nothing to
+scale the caps cannot be met.
 
-Level handling is deliberately absent here, for the reason it is absent for
-v4l2h264enc: the encoder is the only thing that knows the negotiated resolution
-and frame rate, so it calculates its own level. mpph264enc gained that in a
-companion patch to gstreamer-rockchip; before it, the encoder advertised a fixed
-level 4.0 (profile-level-id 42c028) while browsers offer 3.1 (42e01f) for 720p30,
-and no video reached Firefox or Chrome at all.
+Level handling is absent for the same reason as for v4l2h264enc: the encoder
+knows the negotiated resolution and frame rate and calculates its own level,
+which mpph264enc gained in https://github.com/JeffyCN/mirrors/pull/83.
 
-Upstream-Status: Pending
+Upstream-Status: Pending [https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs/-/issues/826]
 
 --- a/net/webrtc/src/webrtcsink/imp.rs
 +++ b/net/webrtc/src/webrtcsink/imp.rs
-@@ -684,6 +684,25 @@
- 
-                 ret.add_many([&vapostproc])?;
-                 (vapostproc.clone(), vapostproc)
-+            } else if codec
-+                .encoder_factory()
-+                .is_some_and(|factory| factory.name() == "mpph264enc")
-+            {
-+                // Rockchip's MPP encoder takes NV12, I420, YUY2, UYVY and a dozen more
-+                // formats on its sink pad and performs any conversion it needs on the
-+                // SoC's 2D engine (RGA). So unlike the NVIDIA and VA cases above, what
-+                // it wants is not a better converter but none at all: a software
-+                // `videoconvert ! videoscale` in front of it is a full CPU pass over
-+                // every frame, which on the four Cortex-A55s of an RK3566 is precisely
-+                // the cost the hardware encoder exists to avoid.
-+                //
-+                // The trade-off, stated plainly: without `videoscale` this bin cannot
-+                // resize, so the negotiated resolution has to be one the source already
-+                // produces.
-+                let identity = make_element("identity", None)?;
-+
-+                ret.add_many([&identity])?;
-+                (identity.clone(), identity)
-             } else {
-                 let convert = make_element("videoconvert", None)?;
-                 let scale = make_element("videoscale", None)?;
-@@ -816,6 +835,14 @@
+@@ -816,6 +816,14 @@ fn configure_encoder(enc: &gst::Element, start_bitrate: u32) {
                  enc.set_property("key-int-max", 256u32);
                  enc.set_property_from_str("rate-control", "cbr");
              }
@@ -70,7 +43,7 @@ Upstream-Status: Pending
              "nvv4l2h264enc" => {
                  enc.set_property("bitrate", start_bitrate);
                  if enc.has_property("preset-level") {
-@@ -1170,6 +1197,7 @@
+@@ -1170,6 +1178,7 @@ impl VideoEncoder {
                  | "vaapivp8enc"
                  | "vaapivp9enc"
                  | "qsvh264enc"
@@ -78,7 +51,7 @@ Upstream-Status: Pending
                  | "nvv4l2h264enc"
                  | "nvv4l2vp8enc"
                  | "nvv4l2vp9enc"
-@@ -1201,6 +1229,7 @@
+@@ -1201,6 +1210,7 @@ impl VideoEncoder {
              | "vah265enc" | "vah265lpenc" | "vaav1enc" | "vaav1lpenc" => {
                  (self.element.property::<u32>("bitrate") * 1000) as i32
              }
@@ -86,7 +59,7 @@ Upstream-Status: Pending
              "openh264enc" | "nvv4l2h264enc" | "nvv4l2vp8enc" | "nvv4l2vp9enc" | "rav1enc"
              | "nvv4l2av1enc" => (self.element.property::<u32>("bitrate")) as i32,
              _ => return Err(WebRTCSinkError::BitrateNotSupported),
-@@ -1244,6 +1273,7 @@
+@@ -1244,6 +1254,7 @@ impl VideoEncoder {
              "openh264enc" | "nvv4l2h264enc" | "nvv4l2vp8enc" | "nvv4l2vp9enc" | "nvv4l2av1enc" => {
                  self.element.set_property("bitrate", bitrate as u32)
              }
