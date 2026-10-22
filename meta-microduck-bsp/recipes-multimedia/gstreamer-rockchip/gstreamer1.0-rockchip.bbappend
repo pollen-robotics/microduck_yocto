@@ -1,6 +1,7 @@
-# Build from our fork, pollen-robotics/gstreamer_rockship (a GitHub fork of
-# JeffyCN/mirrors), on the branch that carries the two mpph264enc commits we
-# sent upstream as JeffyCN/mirrors#83, against `gstreamer-rockchip`. They are a pair.
+# Pin JeffyCN/mirrors `gstreamer-rockchip` past the two mpph264enc commits we
+# sent upstream as JeffyCN/mirrors#83 (merged as df71354 and bd16b2b,
+# patch-identical to the pollen-robotics/gstreamer_rockship fork we built from
+# before). meta-rockchip 54f31b3 still pins c37e7cf, which has neither.
 #
 # The first lets mpph264enc say `constrained-baseline`, without which webrtcsink's
 # discovery pass finds no codec at all and every session dies on not-negotiated.
@@ -12,20 +13,25 @@
 # confirmed on hardware on 2026-09-16, where forcing level=3.1 by hand restored
 # the picture immediately.
 #
-# This also moves the base from meta-rockchip's c37e7cf to a0d45af, the
-# `gstreamer-rockchip` tip on 2026-08-26, since that is what the PR is against.
-# Between the two, COPYING, meson.build and meson_options.txt are unchanged, so
-# the base recipe's LIC_FILES_CHKSUM and PACKAGECONFIG still hold.
+# ebc758a is the branch tip on 2026-10-22. Upstream merged our commits on top of
+# Jeffy's RGA/GPU conversion rework (a09d56b..890834c), so no merged commit
+# avoids it. The tip also brings 4b68d0f: the encoder's proposed pool now
+# requires max-pending+1 buffers, so rkisp stops running dry and dropping frames.
+#
+# Between c37e7cf and ebc758a COPYING is unchanged, so the base recipe's
+# LIC_FILES_CHKSUM holds. meson_options.txt gained one option, `gpu` (an
+# EGL/GLES2/GBM conversion tier, `auto`). We opt out of opengl, so it would find
+# nothing anyway, but `auto` turns on whenever something drags EGL into the
+# sysroot -- disable it outright rather than let the plugin change silently.
 #
 # Replacing SRC_URI wholesale is safe here -- unlike u-boot-rockchip -- because
 # the base recipe (meta-rockchip 54f31b3) has exactly one entry, this git URL.
-# Recheck that when bumping meta-rockchip.
-#
-# Once the PR is merged, drop this whole file and let meta-rockchip's SRCREV
-# catch up, or pin JeffyCN/mirrors at the merge commit.
+# Recheck that when bumping meta-rockchip, and drop this file once its SRCREV
+# reaches ebc758a.
 #
 # The recipe file is gstreamer1.0-rockchip.bb with no version, so this append is
 # named to match it exactly -- a _%.bbappend would not attach to it.
 
-SRC_URI:microduck-machine = "git://github.com/pollen-robotics/gstreamer_rockship.git;protocol=https;branch=mpph264enc-webrtc"
-SRCREV:microduck-machine = "e404bf996cc89cdb9e91aca2dbd2d4c0b3eb4d5a"
+SRC_URI:microduck-machine = "git://github.com/JeffyCN/mirrors.git;protocol=https;branch=gstreamer-rockchip"
+SRCREV:microduck-machine = "ebc758a13d425d34858a98dbcdb4a4bd702daa0f"
+EXTRA_OEMESON:append:microduck-machine = " -Dgpu=disabled"
