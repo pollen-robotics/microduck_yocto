@@ -105,19 +105,17 @@ local_conf_header:
     INHERIT += "rm_work"
 
   kernel-shallow: |
-    # radxa/kernel is a full Linux history: 13,224,308 objects and 10.7M deltas.
-    # A --mirror clone of it died with "fatal: fetch-pack: invalid index-pack
-    # output" and is a liability regardless -- a single corrupt byte anywhere in
-    # a multi-GB packfile stream fails the whole fetch.
+    # The kernel tree (armbian/linux-rockchip, radxa/kernel before it) is a full
+    # Linux history: radxa's was 13,224,308 objects and 10.7M deltas. A --mirror
+    # clone of it died with "fatal: fetch-pack: invalid index-pack output" and is
+    # a liability regardless -- a single corrupt byte anywhere in a multi-GB
+    # packfile stream fails the whole fetch. So fetch it shallow.
     #
-    # meta-rockchip avoids this by pointing at JeffyCN's filtered mirror; we need
-    # radxa's tree only for rk3566-radxa-zero-3w-*.dts, so fetch it shallow.
-    #
-    # Caveat: depth 1 only contains the branch tip, and our SRCREV *is* the tip
-    # today. When radxa next pushes to linux-6.1-stan-rkr4.1 the pinned SRCREV
-    # leaves the shallow window and this breaks. Bump the depth when it does. If
-    # that becomes annoying, the durable fix is to go back to JeffyCN's small
-    # mirror and carry the three Zero 3W device trees as patches in
-    # meta-microduck-bsp/recipes-kernel/linux/files/ instead.
+    # The pin survives upstream pushes. With no clone in DL_DIR, bitbake's git
+    # fetcher (clone_shallow_local) runs `git fetch origin <SRCREV> --depth 1`
+    # against GitHub, which serves any reachable commit by SHA -- checked
+    # 2026-10-22 with a commit five behind rk-6.1-rkr7.2's tip. (This used to
+    # say a push would break it; that was the branch-tip fetch of an older
+    # bitbake.)
     BB_GIT_SHALLOW:pn-linux-rockchip = "1"
     BB_GIT_SHALLOW_DEPTH:pn-linux-rockchip = "1"

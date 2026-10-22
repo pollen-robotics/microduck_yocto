@@ -62,7 +62,7 @@ to `rk3566-radxa-zero-3w-aic8800ds2.dtb` and the out-of-tree driver comes from
 Verified present in the rootfs (not merely in the manifest):
 
 ```
-/usr/lib/modules/6.1.84-rockchip-standard/extra/aic8800_{bsp,btlpm,fdrv}.ko
+/usr/lib/modules/6.1.172-rockchip-standard/extra/aic8800_{bsp,btlpm,fdrv}.ko
 /usr/lib/modules-load.d/aic8800_{bsp,btlpm,fdrv}.conf
 /usr/lib/firmware/aic8800_fw/SDIO/{aic8800,aic8800D80,aic8800D80N,...}/
 ```

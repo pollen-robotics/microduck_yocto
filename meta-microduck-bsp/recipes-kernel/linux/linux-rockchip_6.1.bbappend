@@ -1,43 +1,83 @@
-# Rockchip vendor BSP 6.1, but from Radxa's fork rather than JeffyCN's mirror.
+# Rockchip vendor BSP 6.1 from Armbian's tree, carrying radxa's board description.
 #
-# Same Rockchip 6.1 base; the difference is that Radxa's tree is the only one
-# carrying rk3566-radxa-zero-3w-*.dts. JeffyCN's kernel-6.1-2024_04_14 has
-# quartz64 / soquartz-cm4 / roc-pc / evb only, so on that tree we would have to
-# port the Zero 3 device tree by hand.
+# armbian/linux-rockchip rk-6.1-rkr7.2 is Rockchip's rkr7.2 BSP kept merged with
+# 6.1 stable: 6.1.172 at this SRCREV, against 6.1.84 for the radxa/kernel
+# linux-6.1-stan-rkr4.1 tree this replaces. Two reasons to move:
+#   - CVE fixes: radxa's branch stopped at 6.1.84 (early 2024).
+#   - rkaiq rkr7 (the beta board's 3A engine, 6.0x32.0) needs a kernel newer than
+#     6.1.115: older ones abort at init with "failed to get cac buf info"
+#     (Seeed's postinst for that package). The beta board ran 6.1.172 under Armbian.
 #
-# Verified present in this tree: drivers/media/i2c/gc2093.c (the camera sensor).
+# What is radxa's rather than Armbian's, deliberately -- the parts that describe
+# *this* board, which have run on it:
+#   0000-*.patch      radxa's rk3566-radxa-zero-3w-aic8800ds2.dts and
+#                     rk3566-radxa-zero3.dtsi from 270a678f8364. Armbian's own
+#                     Zero 3 dtsi differs in ~300 lines (no rk3568-linux.dtsi,
+#                     pmuio2 at 3.3 V instead of 1.8 V), so 0001-0003 stay cut
+#                     against radxa's file.
+#   radxa-rockchip-linux.kconfig
+#                     radxa's arch/arm64/configs/rockchip_linux_defconfig from the
+#                     same commit. Rockchip's rkr7.2 one differs in 726 lines; this
+#                     keeps the effective config the one the board has run, and
+#                     options new since 6.1.84 take their Kconfig default.
+#
+# Verified present in this tree: gc2093.c and imx219.c (the two camera sensors),
+# rk3568-linux.dtsi and the dt-bindings the radxa dts and the beta DTS include.
+#
+# Fetched shallow (kas/microduck.yml, kernel-shallow): bitbake asks GitHub for
+# SRCREV itself at depth 1, so this pin keeps working after Armbian pushes.
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRCREV = "270a678f8364683447f994adec9d31eb182eaf85"
+SRCREV = "e97b8a3f30473ea345e0603a1390bb46fa7cc4f2"
 SRC_URI = " \
-    git://github.com/radxa/kernel.git;protocol=https;nobranch=1;branch=linux-6.1-stan-rkr4.1 \
+    git://github.com/armbian/linux-rockchip.git;protocol=https;nobranch=1;branch=rk-6.1-rkr7.2 \
+    file://0000-rk3566-radxa-zero-3w-device-tree-from-radxa.patch \
     file://0001-rk3566-radxa-zero-3w-restore-chosen-bootargs.patch \
+    file://radxa-rockchip-linux.kconfig \
     file://cgroups.cfg \
     file://mali-csf.cfg \
     file://no-mali400.cfg \
     file://qemu-virt.cfg \
     file://rauc.cfg \
-    file://0004-scripts-resource_tool-zero-index-entries-before-writ.patch \
 "
 
 # Reproducible boot.img: microduck-bundle refuses a bundle whose boot.img differs from the card's.
 #   no-mali400.cfg    the Mali-400 driver baked `date` into the Image
-#   0004-*.patch      resource_tool wrote stack garbage into resource.img
+# (resource_tool used to write stack garbage into resource.img and needed a patch;
+# this tree zero-initialises those structs itself.)
 
-# WATCH OUT when adding config fragments. linux-rockchip.inc builds the defconfig
-# with:
+# The defconfig: radxa's, written into the tree as microduck_defconfig before
+# do_kernel_metadata reads ${S}/arch/${ARCH}/configs/${KBUILD_DEFCONFIG}.
 #
-#     DEFCONFIGS="rockchip_linux_defconfig ${RK_SOC_FAMILY}_linux.config"
-#     cat ${KBUILD_DEFCONFIGS} > ${KBUILD_DEFCONFIG} || true
+# Not through meta-rockchip's own mechanism, which cannot take a file from us.
+# linux-rockchip.inc's do_kernel_metadata:prepend only assembles a defconfig
+# `if [ ! -f "${KBUILD_DEFCONFIG}" ]` -- and rockchip-common.inc's default,
+# rockchip_linux_defconfig, is in every Rockchip tree, so it never ran: the
+# build took the tree's file as is (radxa's, while the tree was radxa's; in
+# Armbian's it would be Rockchip's). Pointing KBUILD_DEFCONFIG at a missing name
+# makes it run, but then
 #
-# radxa's tree has no rk3568_linux.config, and that `|| true` swallows the
-# missing file without a warning -- so every SoC-specific override meta-rockchip
-# expects to apply is silently absent, and we get radxa's family-wide
-# rockchip_linux_defconfig alone. mali-csf.cfg exists because of exactly that.
+#     cat ${KBUILD_DEFCONFIGS:-$CONFIGS} > ${KBUILD_DEFCONFIG} || true
 #
-# Assume nothing about the effective config: check
-# ${B}/.config after do_configure rather than trusting the defconfig name.
+# is not a bitbake expansion, KBUILD_DEFCONFIGS is not exported, and $CONFIGS is
+# a typo for $DEFCONFIGS: `cat` gets no argument and writes an empty defconfig.
+# Two HF builds failed on exactly that on 2026-10-22.
+#
+# The file is not named *defconfig*: kernel-yocto's find_sccs takes any SRC_URI
+# file with "defconfig" in its name as a second defconfig and warns that it
+# dropped it.
+KBUILD_DEFCONFIG = "microduck_defconfig"
+
+microduck_install_defconfig() {
+	install -m 0644 "${UNPACKDIR}/radxa-rockchip-linux.kconfig" "${S}/arch/${ARCH}/configs/${KBUILD_DEFCONFIG}"
+}
+do_kernel_metadata[prefuncs] += "microduck_install_defconfig"
+
+# WATCH OUT when adding config fragments. Assume nothing about the effective
+# config: check ${B}/.config after do_configure rather than trusting the
+# defconfig name. mali-csf.cfg exists because a SoC-specific override everyone
+# assumed was applied never was.
 
 # meta-rockchip's linux-rockchip.inc points PATCHPATH at its own
 # linux-rockchip_6.1/ directory: a do_mounts retry plus two drm-rockchip

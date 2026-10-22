@@ -959,7 +959,7 @@
  *
  * Seeed's DTB also describes a GC2613 at 0x31 on the same connector, the part
  * the V0.1 schematic names. It is left out: nothing answers at 0x31 on the
- * board, radxa's kernel has no gc2613 driver, and a sensor node nothing binds
+ * board, the kernel (radxa's or Armbian's) has no gc2613 driver, and a sensor node nothing binds
  * leaves rkisp waiting on an async subdev that never arrives -- no /dev/video*
  * at all, even for the GC2093.
  *

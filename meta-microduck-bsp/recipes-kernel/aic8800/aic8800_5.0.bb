@@ -1,7 +1,7 @@
 SUMMARY = "AICSemi AIC8800 SDIO wifi/BT driver and firmware"
 DESCRIPTION = "Out-of-tree AICSemi aic8800_* kernel modules for the SDIO-attached \
 AIC8800 wifi/BT combo fitted to some Radxa Zero 3W boards, plus its firmware. \
-Not present in radxa's kernel tree -- the device tree wires up the SDIO bus, \
+Not present in the kernel tree (radxa's or Armbian's) -- the device tree wires up the SDIO bus, \
 power sequence and BT UART, but nothing drives it."
 HOMEPAGE = "https://github.com/radxa-pkg/aic8800"
 # Two licences in one tree, per debian/copyright:

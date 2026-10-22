@@ -6,9 +6,11 @@ DDR3), 64 GB eMMC, no SD slot.
 Machine `microduck-beta`, device tree
 `meta-microduck-bsp/recipes-kernel/linux/files/rk3566-microduck-beta.dts`.
 
-**Our image has not run on a board yet.** The DTS compiles against radxa's tree
-at the pinned `SRCREV`, with the same dtc warnings as the Zero 3W's and no new
-ones.
+**Our image has not run on a board yet.** The DTS compiled against radxa's tree
+with the same dtc warnings as the Zero 3W's and no new ones, and compiles against
+Armbian's rk-6.1-rkr7.2 (6.1.172, HF job 6ada12a1 on 2026-10-22, with `wq9201s`).
+6.1.172 is also what the beta camera's rkaiq rkr7 needs: Seeed's package refuses
+kernels up to 6.1.115 ("failed to get cac buf info"), and radxa's tree was 6.1.84.
 
 **The schematic is older than the boards; Seeed's own device tree is not.** The
 DTS was transcribed from "MicroDuck Main Board V0.1" (2026-09-09), then

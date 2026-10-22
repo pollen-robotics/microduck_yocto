@@ -14,7 +14,7 @@ Upstream-Status: Inappropriate [configuration]
 
 --- a/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
 +++ b/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
-@@ -56,6 +56,32 @@
+@@ -56,6 +56,34 @@
  	status = "okay";
  	pinctrl-names = "default";
  	pinctrl-0 = <&uart1m0_xfer &uart1m0_ctsn>;
@@ -35,8 +35,10 @@ Upstream-Status: Inappropriate [configuration]
 + * radxa's own rk3568-uart2-m0.dts overlay -- whose compatible list includes
 + * radxa,zero3, and which their setup-board.sh enables as "uart2-m0" on the
 + * Armbian prototype this board replaces.
++ *
++ * By path, not &fiq_debugger: Armbian's rk3568-linux.dtsi drops that label.
 + */
-+&fiq_debugger {
++&{/fiq-debugger} {
 +	status = "disabled";
 +};
 +

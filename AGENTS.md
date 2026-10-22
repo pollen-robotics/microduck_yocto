@@ -21,11 +21,16 @@ you didn't look. This repo already has a scar for each:
   `destsuffix=rkbin`) that `make.sh` requires. Replacing `SRC_URI` wholesale
   silently drops it and breaks the build.
 - `linux-rockchip.inc` assembles its defconfig with
-  `cat rockchip_linux_defconfig ${RK_SOC_FAMILY}_linux.config > ... || true`.
-  radxa's tree has no `rk3568_linux.config`, and the `|| true` hides that, so
-  **every SoC-specific config override is silently missing** and you get radxa's
-  family-wide defconfig alone. Never trust the effective kernel config from the
-  defconfig name — read `${B}/.config` after `do_configure`.
+  `cat rockchip_linux_defconfig ${RK_SOC_FAMILY}_linux.config > ... || true` —
+  **but only if `KBUILD_DEFCONFIG` is not already a file in the tree**, and
+  `rockchip-common.inc` sets it to `rockchip_linux_defconfig`, which every
+  Rockchip tree has. So that step never ran: we got the tree's family-wide
+  defconfig alone, and **no SoC-specific config override was ever applied**.
+  Nor can it be fed: with `KBUILD_DEFCONFIGS` set it writes an *empty*
+  defconfig (a `$CONFIGS` typo, and the variable is not exported). The kernel
+  is now Armbian's tree with radxa's defconfig installed into it by our own
+  prefunc (`linux-rockchip_6.1.bbappend`). Never trust the effective kernel
+  config from the defconfig name — read `${B}/.config` after `do_configure`.
 - **Name a bbappend after the upstream *filename*, not the recipe's version.**
   `_%.bbappend` matches `<name>_<version>.bb`. meta-rockchip's U-Boot recipe file
   is `u-boot-rockchip.bb` with `PV` set *inside* it, and meta-rauc's config recipe

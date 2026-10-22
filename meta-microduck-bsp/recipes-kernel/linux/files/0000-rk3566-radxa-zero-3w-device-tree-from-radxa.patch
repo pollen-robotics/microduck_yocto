@@ -1,0 +1,572 @@
+From 929bf61365e0d8f06a254a1710da025da88425a5 Mon Sep 17 00:00:00 2001
+From: Fabien Danieau <fabien.danieau@pollen-robotics.com>
+Date: Thu, 22 Oct 2026 14:48:04 +0200
+Subject: [PATCH] arm64: dts: rockchip: rk3566: radxa's Zero 3W (AIC8800DS2)
+ device tree
+
+Taken verbatim from radxa/kernel at 270a678f8364 (linux-6.1-stan-rkr4.1):
+rk3566-radxa-zero-3w-aic8800ds2.dts, and rk3566-radxa-zero3.dtsi in place
+of this tree's own. Armbian describes the board with a different .dtsi
+(no rk3568-linux.dtsi, pmuio2 at 3.3 V instead of 1.8 V, ~300 lines of
+other differences); this keeps the description that microduck has run
+on the board.
+
+Upstream-Status: Inappropriate [configuration]
+---
+ arch/arm64/boot/dts/rockchip/Makefile         |   1 +
+ .../rk3566-radxa-zero-3w-aic8800ds2.dts       | 142 +++++++++
+ .../boot/dts/rockchip/rk3566-radxa-zero3.dtsi | 288 ++++++++----------
+ 3 files changed, 267 insertions(+), 164 deletions(-)
+ create mode 100644 arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
+
+diff --git a/arch/arm64/boot/dts/rockchip/Makefile b/arch/arm64/boot/dts/rockchip/Makefile
+index ee3e8aa3b..782d770e9 100644
+--- a/arch/arm64/boot/dts/rockchip/Makefile
++++ b/arch/arm64/boot/dts/rockchip/Makefile
+@@ -498,6 +498,7 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-orangepi-3b-v2.1.dtb
+ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-orangepi-3b.dtb
+ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-radxa-zero3-ap6212.dtb
+ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-radxa-zero3.dtb
++dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-radxa-zero-3w-aic8800ds2.dtb
+ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3566-roc-pc.dtb
+ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-armsom-sige3.dtb
+ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-dshapi-r1.dtb
+diff --git a/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts b/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
+new file mode 100644
+index 000000000..6a4ec2124
+--- /dev/null
++++ b/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
+@@ -0,0 +1,142 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * Copyright (c) 2022 Rockchip Electronics Co., Ltd.
++ * Copyright (c) 2023 Radxa Computer (Shenzhen) Co., Ltd.
++ *
++ */
++
++/dts-v1/;
++
++#include "rk3566-radxa-zero3.dtsi"
++
++/ {
++	model = "Radxa ZERO 3";
++	compatible = "radxa,zero3w-aic8800ds2", "radxa,zero3", "rockchip,rk3566";
++
++	wireless_wlan: wireless-wlan {
++		compatible = "wlan-platdata";
++		rockchip,grf = <&grf>;
++		WIFI,poweren_gpio = <&gpio0 RK_PC0 GPIO_ACTIVE_HIGH>;
++		status = "okay";
++	};
++
++	wireless_bluetooth: wireless-bluetooth {
++		compatible = "bluetooth-platdata";
++		uart_rts_gpios = <&gpio2 RK_PB5 GPIO_ACTIVE_LOW>;
++		pinctrl-names = "default", "rts_gpio";
++		pinctrl-0 = <&uart1m0_rtsn>;
++		pinctrl-1 = <&uart1_gpios>;
++		BT,reset_gpio    = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>;
++		BT,wake_gpio     = <&gpio0 RK_PB4 GPIO_ACTIVE_HIGH>;
++		BT,wake_host_irq = <&gpio0 RK_PB3 GPIO_ACTIVE_HIGH>;
++		status = "okay";
++	};
++
++	sdio_pwrseq: sdio-pwrseq {
++		compatible = "mmc-pwrseq-simple";
++		pinctrl-names = "default";
++		pinctrl-0 = <&wifi_enable_h>;
++		reset-gpios = <&gpio0 RK_PC0 GPIO_ACTIVE_LOW>;
++	};
++
++	board_antenna: board-antenna {
++		status = "okay";
++		compatible = "regulator-fixed";
++		enable-active-low;
++		gpio = <&gpio3 RK_PD3 GPIO_ACTIVE_LOW>;
++		regulator-always-on;
++		regulator-boot-on;
++		pinctrl-0 = <&ant_1>;
++		pinctrl-names = "default";
++		regulator-name = "board_antenna";
++	};
++};
++
++&uart1 {
++	status = "okay";
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart1m0_xfer &uart1m0_ctsn>;
++};
++
++&sdmmc1 {
++	supports-sdio;
++	bus-width = <4>;
++	disable-wp;
++	cap-sd-highspeed;
++	cap-sdio-irq;
++	keep-power-in-suspend;
++	non-removable;
++	rockchip,default-sample-phase = <180>;
++	mmc-pwrseq = <&sdio_pwrseq>;
++	non-removable;
++	no-sd;
++	no-mmc;
++	pinctrl-names = "default";
++	pinctrl-0 = <&sdmmc1_bus4 &sdmmc1_cmd &sdmmc1_clk>;
++	sd-uhs-sdr104;
++	status = "okay";
++};
++
++&pinctrl {
++	wifi {
++		wifi_enable_h: wifi-enable-h {
++			rockchip,pins = <0 RK_PC0 RK_FUNC_GPIO &pcfg_pull_none>;
++		};
++
++	};
++
++	wireless-bluetooth {
++		uart1_gpios: uart1-gpios {
++			rockchip,pins = <2 RK_PB5 RK_FUNC_GPIO &pcfg_pull_none>;
++		};
++	};
++
++	sdmmc1 {
++		/omit-if-no-ref/
++		sdmmc1_bus4: sdmmc1-bus4 {
++			rockchip,pins =
++				/* sdmmc1_d0 */
++				<2 RK_PA3 1 &pcfg_pull_up_drv_level_12>,
++				/* sdmmc1_d1 */
++				<2 RK_PA4 1 &pcfg_pull_up_drv_level_12>,
++				/* sdmmc1_d2 */
++				<2 RK_PA5 1 &pcfg_pull_up_drv_level_12>,
++				/* sdmmc1_d3 */
++				<2 RK_PA6 1 &pcfg_pull_up_drv_level_12>;
++		};
++
++		/omit-if-no-ref/
++		sdmmc1_clk: sdmmc1-clk {
++			rockchip,pins =
++				/* sdmmc1_clk */
++				<2 RK_PB0 1 &pcfg_pull_up_drv_level_12>;
++		};
++
++		/omit-if-no-ref/
++		sdmmc1_cmd: sdmmc1-cmd {
++			rockchip,pins =
++				/* sdmmc1_cmd */
++				<2 RK_PA7 1 &pcfg_pull_up_drv_level_12>;
++		};
++
++		/omit-if-no-ref/
++		sdmmc1_det: sdmmc1-det {
++			rockchip,pins =
++				/* sdmmc1_det */
++				<2 RK_PB2 1 &pcfg_pull_up>;
++		};
++
++		/omit-if-no-ref/
++		sdmmc1_pwren: sdmmc1-pwren {
++			rockchip,pins =
++				/* sdmmc1_pwren */
++				<2 RK_PB1 1 &pcfg_pull_none>;
++		};
++	};
++
++	antenna {
++		ant_1: ant-1 {
++			rockchip,pins = <3 RK_PD3 RK_FUNC_GPIO &pcfg_pull_down>;
++		};
++	};
++};
+\ No newline at end of file
+diff --git a/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero3.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero3.dtsi
+index 67b7699ed..6dfb8406d 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero3.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero3.dtsi
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+ /*
+  * Copyright (c) 2022 Rockchip Electronics Co., Ltd.
+- * Copyright (c) 2023 Radxa Limited.
++ * Copyright (c) 2023 Radxa Computer (Shenzhen) Co., Ltd.
+  *
+  */
+ 
+@@ -13,42 +13,17 @@
+ #include <dt-bindings/pinctrl/rockchip.h>
+ #include <dt-bindings/input/rk-input.h>
+ #include <dt-bindings/display/drm_mipi_dsi.h>
++#include <dt-bindings/display/rockchip_vop.h>
+ #include <dt-bindings/sensor-dev.h>
+ #include <dt-bindings/leds/common.h>
+ #include "rk3566.dtsi"
++#include "rk3568-linux.dtsi"
+ 
+ / {
+ 	model = "Radxa ZERO 3";
+ 	compatible = "radxa,zero3", "rockchip,rk3566";
+ 
+-	fiq_debugger: fiq-debugger {
+-		compatible = "rockchip,fiq-debugger";
+-		rockchip,serial-id = <2>;
+-		rockchip,wake-irq = <0>;
+-		/* If enable uart uses irq instead of fiq */
+-		rockchip,irq-mode-enable = <1>;
+-		rockchip,baudrate = <1500000>;  /* Only 115200 and 1500000 */
+-		interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_LOW>;
+-		pinctrl-names = "default";
+-		pinctrl-0 = <&uart2m0_xfer>;
+-		status = "okay";
+-	};
+-
+-	debug: debug@fd904000 {
+-		compatible = "rockchip,debug";
+-		reg = <0x0 0xfd904000 0x0 0x1000>,
+-			<0x0 0xfd905000 0x0 0x1000>,
+-			<0x0 0xfd906000 0x0 0x1000>,
+-			<0x0 0xfd907000 0x0 0x1000>;
+-	};
+-
+-	cspmu: cspmu@fd90c000 {
+-		compatible = "rockchip,cspmu";
+-		reg = <0x0 0xfd90c000 0x0 0x1000>,
+-			<0x0 0xfd90d000 0x0 0x1000>,
+-			<0x0 0xfd90e000 0x0 0x1000>,
+-			<0x0 0xfd90f000 0x0 0x1000>;
+-	};
++	/delete-node/ chosen;
+ 
+ 	vcc_sys: vcc-sys {
+ 		compatible = "regulator-fixed";
+@@ -91,17 +66,13 @@ board-led {
+ 	};
+ 
+ 	hdmi_sound: hdmi-sound {
+-		compatible = "simple-audio-card";
+-		simple-audio-card,format = "i2s";
+-		simple-audio-card,mclk-fs = <128>;
+-		simple-audio-card,name = "rockchip-hdmi0";
+-
+-		simple-audio-card,cpu {
+-			sound-dai = <&i2s0_8ch>;
+-		};
+-		simple-audio-card,codec {
+-			sound-dai = <&hdmi>;
+-		};
++		status = "okay";
++		compatible = "rockchip,hdmi";
++		rockchip,mclk-fs = <128>;
++		rockchip,card-name = "rockchip-hdmi";
++		rockchip,cpu = <&i2s0_8ch>;
++		rockchip,codec = <&hdmi>;
++		rockchip,jack-det;
+ 	};
+ };
+ 
+@@ -125,7 +96,7 @@ &gpu {
+ 
+ &pmu_io_domains {
+ 	status = "okay";
+-	pmuio2-supply = <&vcc_3v3>;
++	pmuio2-supply = <&vcc_1v8>;
+ 	vccio1-supply = <&vccio_acodec>;
+ 	vccio2-supply = <&vcc_1v8>;
+ 	vccio3-supply = <&vccio_sd>;
+@@ -138,7 +109,7 @@ &pmu_io_domains {
+ &i2c0 {
+ 	status = "okay";
+ 
+- 	vdd_cpu: rk860x@40 {
++	vdd_cpu: rk860x@40 {
+ 		status = "okay";
+ 		compatible = "silergy,syr827";
+ 		reg = <0x40>;
+@@ -493,14 +464,14 @@ &gmac1m1_rgmii_clk
+ 	rx_delay = <0x27>;
+ 
+ 	phy-handle = <&rgmii_phy1>;
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &mdio1 {
+ 	rgmii_phy1: phy@0 {
+ 		compatible = "ethernet-phy-ieee802.3-c22";
+ 		reg = <0x0>;
+-		status = "okay";
++		status = "disabled";
+ 	};
+ };
+ 
+@@ -521,6 +492,7 @@ &u2phy0_host {
+ };
+ 
+ &u2phy0_otg {
++	rockchip,dis-u2-susphy;
+ 	status = "okay";
+ };
+ 
+@@ -572,10 +544,6 @@ &usbhost30 {
+ 	status = "okay";
+ };
+ 
+-&u2phy0_otg {
+-	status = "okay";
+-};
+-
+ &usbdrd_dwc3 {
+ 	status = "okay";
+ };
+@@ -606,6 +574,13 @@ &vop_mmu {
+ 	status = "okay";
+ };
+ 
++&vp0 {
++	rockchip,plane-mask = <(1 << ROCKCHIP_VOP2_CLUSTER0 | 1 << ROCKCHIP_VOP2_ESMART0 |
++				1 << ROCKCHIP_VOP2_SMART0)>;
++	rockchip,primary-plane = <ROCKCHIP_VOP2_CLUSTER0>;
++	cursor-win-id = <ROCKCHIP_VOP2_ESMART0>;
++};
++
+ &i2c3 {
+ 	status = "okay";
+ 	pinctrl-0 = <&i2c3m1_xfer>;
+@@ -619,25 +594,114 @@ usbc0: fusb302@22 {
+ 		pinctrl-names = "default";
+ 		pinctrl-0 = <&usbc0_int>;
+ 	};
+- };
+-
+-&reserved_memory {
+-	ramoops: ramoops@110000 {
+-		compatible = "ramoops";
+-		reg = <0x0 0x110000 0x0 0xf0000>;
+-		record-size = <0x20000>;
+-		console-size = <0x80000>;
+-		ftrace-size = <0x00000>;
+-		pmsg-size = <0x50000>;
+-	};
+ };
+ 
+-&rng {
++&rockchip_suspend {
++	status = "okay";
++};
++
++&i2s0_8ch {
++	status = "okay";
++};
++
++&display_subsystem {
++	status = "okay";
++};
++
++&hdmi {
++	status = "okay";
++	preset_max_hdisplay = <1920>;
++	preset_max_vdisplay = <1080>;
++};
++
++&hdmi_in_vp0 {
++	status = "okay";
++};
++
++&hdmi_in_vp1 {
++	status = "disabled";
++};
++
++&hdmi_sound {
++	status = "okay";
++};
++
++&route_hdmi {
++	status = "okay";
++	connect = <&vp0_out_hdmi>;
++};
++
++&sdmmc0 {
++	max-frequency = <150000000>;
++	supports-sd;
++	no-sdio;
++	no-mmc;
++	bus-width = <4>;
++	cap-mmc-highspeed;
++	cap-sd-highspeed;
++	disable-wp;
++	num-slots = <1>;
++	sd-uhs-sdr104;
++	vmmc-supply = <&vcc3v3_sys>;
++	vqmmc-supply = <&vccio_sd>;
++	pinctrl-names = "default";
++	pinctrl-0 = <&sdmmc0_bus4 &sdmmc0_clk &sdmmc0_cmd &sdmmc0_det>;
+ 	status = "okay";
+ };
+ 
+ &rockchip_suspend {
+ 	status = "okay";
++	rockchip,sleep-debug-en = <1>;
++	rockchip,sleep-mode-config = <
++		(0
++		| RKPM_SLP_CENTER_OFF
++		| RKPM_SLP_HW_PLLS_OFF
++		| RKPM_SLP_PMUALIVE_32K
++		| RKPM_SLP_32K_PVTM
++		)
++	>;
++	rockchip,wakeup-config = <
++		(0
++		| RKPM_GPIO_WKUP_EN
++		| RKPM_USB_WKUP_EN
++		)
++	>;
++};
++
++&pinctrl {
++	pmic {
++		pmic_int: pmic_int {
++			rockchip,pins =
++				<0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
++		};
++
++		soc_slppin_gpio: soc_slppin_gpio {
++			rockchip,pins =
++				<0 RK_PA2 RK_FUNC_GPIO &pcfg_output_low_pull_down>;
++		};
++
++		soc_slppin_slp: soc_slppin_slp {
++			rockchip,pins =
++				<0 RK_PA2 RK_FUNC_GPIO  &pcfg_pull_up>;
++		};
++
++		soc_slppin_rst: soc_slppin_rst {
++			rockchip,pins =
++				<0 RK_PA2 RK_FUNC_GPIO  &pcfg_pull_none>;
++		};
++	};
++
++	leds {
++		board_led: board-led {
++			rockchip,pins = <0 RK_PA0 RK_FUNC_GPIO &pcfg_pull_none>;
++		};
++	};
++
++	usb-typec {
++		usbc0_int: usbc0-int {
++			rockchip,pins = <3 RK_PC7 RK_FUNC_GPIO &pcfg_pull_up>;
++		};
++	};
+ };
+ 
+ &gpio0 {
+@@ -754,107 +818,3 @@ &gpio4 {
+ 		/* GPIO4_D4-D7 */
+ 		"", "", "", "";
+ };
+-
+-&i2s0_8ch {
+-	status = "okay";
+-};
+-
+-&display_subsystem {
+-	status = "okay";
+-};
+-
+-&hdmi {
+-	status = "okay";
+-	preset_max_hdisplay = <1920>;
+-	preset_max_vdisplay = <1080>;
+-};
+-
+-&hdmi_in_vp0 {
+-	status = "okay";
+-};
+-
+-&hdmi_in_vp1 {
+-	status = "disabled";
+-};
+-
+-&hdmi_sound {
+-	status = "okay";
+-};
+-
+-&route_hdmi {
+-	status = "okay";
+-	connect = <&vp0_out_hdmi>;
+-};
+-
+-&sdmmc0 {
+-	max-frequency = <150000000>;
+-	supports-sd;
+-	no-sdio;
+-	no-mmc;
+-	bus-width = <4>;
+-	cap-mmc-highspeed;
+-	cap-sd-highspeed;
+-	disable-wp;
+-	num-slots = <1>;
+-	sd-uhs-sdr104;
+-	vmmc-supply = <&vcc3v3_sys>;
+-	vqmmc-supply = <&vccio_sd>;
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&sdmmc0_bus4 &sdmmc0_clk &sdmmc0_cmd &sdmmc0_det>;
+-	status = "okay";
+-};
+-
+-&rockchip_suspend {
+-	status = "okay";
+-	rockchip,sleep-debug-en = <1>;
+-	rockchip,sleep-mode-config = <
+-		(0
+-		| RKPM_SLP_CENTER_OFF
+-		| RKPM_SLP_HW_PLLS_OFF
+-		| RKPM_SLP_PMUALIVE_32K
+-		| RKPM_SLP_32K_PVTM
+-		)
+-	>;
+-	rockchip,wakeup-config = <
+-		(0
+-		| RKPM_GPIO_WKUP_EN
+-		| RKPM_USB_WKUP_EN
+-		)
+-	>;
+-};
+-
+-&pinctrl {
+-	pmic {
+-		pmic_int: pmic_int {
+-			rockchip,pins =
+-				<0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
+-		};
+-
+-		soc_slppin_gpio: soc_slppin_gpio {
+-			rockchip,pins =
+-				<0 RK_PA2 RK_FUNC_GPIO &pcfg_output_low_pull_down>;
+-		};
+-
+-		soc_slppin_slp: soc_slppin_slp {
+-			rockchip,pins =
+-				<0 RK_PA2 RK_FUNC_GPIO  &pcfg_pull_up>;
+-		};
+-
+-		soc_slppin_rst: soc_slppin_rst {
+-			rockchip,pins =
+-				<0 RK_PA2 RK_FUNC_GPIO  &pcfg_pull_none>;
+-		};
+-	};
+-
+-	leds {
+-		board_led: board-led {
+-			rockchip,pins = <0 RK_PA0 RK_FUNC_GPIO &pcfg_pull_none>;
+-		};
+-	};
+-
+-	usb-typec {
+-		usbc0_int: usbc0-int {
+-			rockchip,pins = <3 RK_PC7 RK_FUNC_GPIO &pcfg_pull_up>;
+-		};
+-	};
+-};
+-- 
+2.53.0
+

@@ -19,8 +19,8 @@ local_conf_header:
     SPDX_INCLUDE_COMPILED_SOURCES:pn-linux-rockchip = "1"
     # meta-rockchip's PV is "6.1", which reads as 6.1.0: every fix since then
     # would count as unpatched (4176 of the first scan's 4246). The Makefile of
-    # the pinned SRCREV says 6.1.84 (uname -r on the board) -- keep in step.
-    CVE_VERSION:pn-linux-rockchip = "6.1.84"
+    # the pinned SRCREV says 6.1.172 -- keep in step.
+    CVE_VERSION:pn-linux-rockchip = "6.1.172"
     # Results go to the files, not the log: the kernel's one-line warning is
     # longer than the 64 KiB line kas can read, and kas crashed on it.
     SBOM_CVE_CHECK_SHOW_WARNINGS = "0"
