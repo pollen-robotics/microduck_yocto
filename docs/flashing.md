@@ -14,6 +14,8 @@ updates itself over the network, so this is done once per robot.
 - A USB-C **data** cable. A charge-only cable shows nothing in `lsusb`.
 - The robot's battery, or a bench supply on the battery input. USB-C alone
   does not start the board.
+- Access to the main board's **Recovery button**: it is not reachable from
+  outside the case, so flash before closing it.
 
 ## Once per release: get and prepare the files
 
