@@ -1,8 +1,10 @@
 SUMMARY = "microduck OS update bundle"
 DESCRIPTION = "Signed RAUC bundle carrying one rootfs slot image."
 
-# Bump on every shipped bundle: `rauc info` reports it as version=.
-PV = "0.1.0"
+# The newest OS release (microduck-os-v<X.Y.Z>), which build-hfjob.sh and
+# build-local.sh read from the tags (scripts/os-release.sh), so a release needs
+# no bump here. `rauc info` reports it as version=. Defaulted in microduck.conf.
+PV = "${MICRODUCK_OS_VERSION}"
 
 inherit bundle
 

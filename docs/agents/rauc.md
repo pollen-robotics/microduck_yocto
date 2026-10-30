@@ -233,7 +233,7 @@ Traps:
    tested ones. The version is the highest `microduck-os-v<X.Y.Z>` release bumped
    (from 0.0.0), shared by every board, and it is what robots show ("updated to
    1.0.0"). The bundle's own RAUC version (`PV` in `microduck-bundle.bb`, seen only
-   by `rauc info`) stays 0.1.0: it is fixed at build time. The one GitHub release,
+   by `rauc info`) is the newest release when it was built (`scripts/os-release.sh`); dev and candidate builds show `<that release>+<build>`. The one GitHub release,
    `microduck-os-v<X.Y.Z>` titled `v<X.Y.Z>`, is tagged at the commit and carries
    each board's re-signed bundle (`microduck-os-v<X.Y.Z>-<board>.raucb`) plus its
    shipping card (`.wic.zst`, `.bmap`) from the same job. The cards come from

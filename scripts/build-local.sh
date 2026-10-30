@@ -32,6 +32,9 @@ KAS_FILES=${KAS_FILES:-kas/microduck.yml}
 # beyond its fixed list, so an exported variable never reaches kas inside the
 # container.
 daemon=$(scripts/daemon-release.sh "${DAEMON_VERSION:-latest}")
+# The bundle's RAUC version, the newest OS release, travels the same way.
+daemon="$daemon
+MICRODUCK_OS_VERSION=$(scripts/os-release.sh)"
 daemon_env=$(printf '%s\n' "$daemon" | sed 's/^/-e /' | tr '\n' ' ')
 
 kas() {

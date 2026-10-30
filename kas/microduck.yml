@@ -35,6 +35,8 @@ target: microduck-image-dev
 env:
   MICRODUCK_DAEMON_VERSION: null
   MICRODUCK_DAEMON_SRCREV: null
+  # The newest OS release (scripts/os-release.sh), the bundle's RAUC version.
+  MICRODUCK_OS_VERSION: null
 
 repos:
   # This repo; no url/commit, kas uses the checkout. Three layers, split the way

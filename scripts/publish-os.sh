@@ -78,8 +78,10 @@ check build "$build" '[0-9]{14}'
 size=$(wc -c < "$work/bundle.raucb")
 sha256=$(sha256sum "$work/bundle.raucb" | cut -d' ' -f1)
 # What robots show. A stable release passes its own (promote-os.yml: 1.0.0); a
-# dev or candidate build is 0.1.0-<build>.
-version=${VERSION:-0.1.0-$build}
+# dev or candidate build is <newest release>+<build> (scripts/os-release.sh):
+# `+`, not `-`, because a semver `-` would sort it before that release.
+[ -n "${VERSION:-}" ] || VERSION=$("$(dirname "$0")/os-release.sh")+$build
+version=$VERSION
 check version "$version" '[0-9A-Za-z.+_-]{1,64}'
 
 path=os/$MACHINE/$build/$CHANNEL.raucb
