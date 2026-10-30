@@ -259,7 +259,16 @@ jobs:
           # would otherwise wait for a login. Inference is billed to the org.
           mkdir -p "$HOME/.local/share/opencode" "$HOME/.config/opencode"
           jq -n --arg k "$HF_TOKEN" '{huggingface:{type:"api",key:$k}}' > "$HOME/.local/share/opencode/auth.json"
-          jq -n '{provider:{huggingface:{options:{headers:{"X-HF-Bill-To":"pollen-robotics"}}}}}' \
+          # limit.output: some of the router's providers refuse more than 16384
+          # completion tokens for GLM-5.3 ("max_completion_tokens is limited to
+          # 16384", v1.0.1's run), and OpenCode asks for more unless told. The schema
+          # requires context too; 200k is under the model's 1M window, because not
+          # every provider publishes its own, and only sets when OpenCode compacts.
+          # shortcut: one limit for whatever RELEASE_NOTES_MODEL names; revisit when
+          # the model changes.
+          jq -n --arg m "${RELEASE_NOTES_MODEL#huggingface/}" \
+            '{provider:{huggingface:{options:{headers:{"X-HF-Bill-To":"pollen-robotics"}},
+              models:{($m):{limit:{context:200000,output:16384}}}}}}' \
             > "$HOME/.config/opencode/opencode.json"
 
           # A failed run can leave a draft that misses PRs; the release must not use it.
