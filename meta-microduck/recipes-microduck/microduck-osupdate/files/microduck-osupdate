@@ -213,8 +213,9 @@ status() {
 	other="{\"slot\":$(jstr "$(other_name)"),\"build\":$(jstr "$(other_build)"),\"good\":$og,\"installed\":$(jstr "$(other_installed)")}"
 	# The index lines passed load_index's pattern, so they hold no quote to escape.
 	builds=$(awk '{printf "%s{\"channel\":\"%s\",\"build\":\"%s\",\"version\":\"%s\"}", (NR > 1 ? "," : ""), $1, $2, $3}' "$STATE/index.txt" 2>/dev/null || true)
-	printf '{"machine":%s,"channel":%s,"slot":%s,"installed_build":%s,"available":%s,"other":%s,"builds":[%s],"phase":%s,"progress":%d,"message":%s,"last_result":%s}\n' \
-		"$(jstr "$(machine)")" "$(jstr "$CHANNEL")" "$(jstr "$(booted_name)")" \
+	prod=false; production && prod=true
+	printf '{"machine":%s,"channel":%s,"production":%s,"slot":%s,"installed_build":%s,"available":%s,"other":%s,"builds":[%s],"phase":%s,"progress":%d,"message":%s,"last_result":%s}\n' \
+		"$(jstr "$(machine)")" "$(jstr "$CHANNEL")" "$prod" "$(jstr "$(booted_name)")" \
 		"$(jstr "$(installed_build)")" "$avail" "$other" "$builds" "$(jstr "$ph")" "$progress" \
 		"$(jstr "$(cat "$STATE/message" 2>/dev/null || true)")" \
 		"$(jstr "$(cat "$STATE/result" 2>/dev/null || true)")"

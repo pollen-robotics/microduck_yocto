@@ -32,6 +32,7 @@
 <h2>Install a build</h2>
 <label for="builds">Published builds (channel <span id="channel">…</span>)</label>
 <select id="builds"><option>Check for updates to list them</option></select>
+<p id="hidden" class="note"></p>
 <p>
   <button id="check">Check for updates</button>
   <button id="install" disabled>Install selected</button>
@@ -72,15 +73,47 @@ function named(build, s) {
   return b ? b.version + " (" + build + ")" : build;
 }
 
+// candidate and stable carry the shipping image, whose keyring trusts the
+// production CA only; dev and dev-<branch> carry the dev image.
+const shipping = (c) => c === "stable" || c.startsWith("candidate");
+
+// What RAUC and osupdate would accept. A production board takes stable builds
+// only (candidates are dev-signed too), and none older than the one it runs.
+function installable(b, s) {
+  if (!s.production) return true;
+  return b.channel === "stable" && !(s.installed_build && b.build < s.installed_build);
+}
+
+// The text of the confirmation, with a warning for the two one-way steps.
+function installPrompt(b, s) {
+  let t = "Install " + b.version + " (" + b.channel + ") and reboot the robot?";
+  const o = s.other || {};
+  const ob = s.builds.find((x) => x.build === o.build);
+  if (!s.production && shipping(b.channel)) {
+    t += "\n\nThis is a shipping image. Once it runs, slot " + o.slot + " takes stable builds only:" +
+      " no dev or candidate build. Come back to slot " + s.slot + " with \"Boot it\", and do not" +
+      " install anything from slot " + o.slot + ": it would overwrite this dev image.";
+  } else if (s.production && o.good && !(ob && shipping(ob.channel))) {
+    t += "\n\nSlot " + o.slot + " holds " + (ob ? "the dev image " + ob.version : "an image this page cannot name") +
+      ", which this install overwrites. If it is the board's last dev image, the only way back to" +
+      " dev afterwards is reflashing the card.";
+  }
+  return t;
+}
+
 // The list, grouped by channel, newest first; the channel's newest is "latest".
 function fillBuilds(s) {
-  const key = JSON.stringify(s.builds) + s.installed_build + (s.other && s.other.build);
+  const key = JSON.stringify(s.builds) + s.installed_build + (s.other && s.other.build) + s.production;
   if (key === listed) return;
   listed = key;
   const sel = $("builds"), keep = sel.value;
   sel.textContent = "";
+  const shown = s.builds.filter((b) => installable(b, s));
+  const hidden = s.builds.length - shown.length;
+  $("hidden").textContent = hidden ? hidden + " builds hidden: this board runs a shipping image, which" +
+    " installs only newer stable builds. Its other slot is the way back." : "";
   const byChannel = {};
-  for (const b of s.builds) (byChannel[b.channel] ||= []).push(b);
+  for (const b of shown) (byChannel[b.channel] ||= []).push(b);
   const channels = Object.keys(byChannel).sort((a, b) => (a === s.channel ? -1 : b === s.channel ? 1 : a.localeCompare(b)));
   for (const c of channels) {
     const g = document.createElement("optgroup");
@@ -93,9 +126,12 @@ function fillBuilds(s) {
     });
     sel.appendChild(g);
   }
-  if (!s.builds.length) sel.innerHTML = "<option>No published builds for this board yet</option>";
+  if (!shown.length) sel.innerHTML = "<option>No installable builds for this board yet</option>";
   else if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
   else if (s.available) sel.value = s.available.build;
+  // available.env can be the other slot's channel (the state is on the shared data
+  // partition), whose build this list may hide: then the newest shown.
+  if (sel.selectedIndex < 0) sel.selectedIndex = 0;
 }
 
 function show(s) {
@@ -132,9 +168,9 @@ async function poll() {
 $("builds").onchange = () => last && show(last);
 $("check").onclick = async () => { $("msg").textContent = "Checking…"; show(await call("POST", "/api/check")); };
 $("install").onclick = async () => {
-  const opt = $("builds").selectedOptions[0];
-  if (!confirm("Install " + opt.textContent + " and reboot the robot?")) return;
-  show(await call("POST", "/api/apply?build=" + encodeURIComponent(opt.value)));
+  const b = last.builds.find((x) => x.build === $("builds").value);
+  if (!b || !confirm(installPrompt(b, last))) return;
+  show(await call("POST", "/api/apply?build=" + encodeURIComponent(b.build)));
 };
 $("switch").onclick = async () => {
   if (!confirm("Reboot into slot " + last.other.slot + " (" + (last.other.build || "the flashed image") + ")?")) return;

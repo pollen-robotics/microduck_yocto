@@ -1,0 +1,18 @@
+name: osupdate-page
+
+# Runs scripts/test-osupdate-page.mjs: which builds the OS update page offers a dev
+# and a production board, and when it warns before a one-way install. Under a
+# second, no Yocto checkout; the runner's own node.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/test-osupdate-page.mjs
