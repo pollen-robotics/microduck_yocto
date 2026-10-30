@@ -1,6 +1,7 @@
 SUMMARY = "microduck robot control and update daemons"
 DESCRIPTION = "robotd (50 Hz Dynamixel control loop), updaterd (signed, \
 rollback-safe update engine), robotctl (local CLI), padd (gamepad client), \
+netpadd (the same client fed over UDP, off unless [netpad] enabled), \
 configd (wifi and robot identity, drives NetworkManager), btd (the BLE \
 transport that fronts configd, so a robot with no network can be provisioned \
 from a phone), mediad, tofd, nfcd, sounds and the duck/pet detectors. Every \
@@ -198,12 +199,13 @@ CARGO_BUILD_FLAGS += "--workspace --exclude xtask --exclude test-support --exclu
 USERADD_PACKAGES = "${PN}"
 # nfcd is both the unit's User= and the group microduck-nfc's udev rule gives the
 # beta's reader (/dev/spidev1.0) to, so the daemon reaches it as its primary group.
-GROUPADD_PARAM:${PN} = "-r robot; -r robot-account; -r bluetooth; -r btd; -r mediad; -r tofd; -r padd; -r i2c; -r nfcd"
+GROUPADD_PARAM:${PN} = "-r robot; -r robot-account; -r bluetooth; -r btd; -r mediad; -r tofd; -r padd; -r i2c; -r nfcd; -r netpadd"
 USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport adapter' btd; \
                        -r -g mediad -d / -s /sbin/nologin -c 'Robot media and WebRTC gateway' mediad; \
                        -r -g tofd -d / -s /sbin/nologin -c 'Robot ToF sensor daemon' tofd; \
                        -r -g padd -d / -s /sbin/nologin -c 'Robot gamepad intent client' padd; \
-                       -r -g nfcd -d / -s /sbin/nologin -c 'Robot NFC reader daemon' nfcd"
+                       -r -g nfcd -d / -s /sbin/nologin -c 'Robot NFC reader daemon' nfcd; \
+                       -r -g netpadd -d / -s /sbin/nologin -c 'Robot gamepad over UDP' netpadd"
 
 # mediad, tofd and padd get their users and groups even though their units are
 # not enabled here, because systemd refuses to start a unit whose User= or
@@ -221,8 +223,14 @@ USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport a
 #                                   already root:input
 #   nfcd     dialout robot          dialout already exists; it is the bench USB
 #                                   reader's /dev/ttyACM*
+#   netpadd  robot                  nothing else: the pad is on the network
+#
+# netpadd is enabled but stays down: its ExecCondition= runs only when
+# `[netpad] enabled` is set, and padd stands down for it then. Without the unit,
+# setting that key left the robot with no pad at all -- padd stood down because
+# the netpadd binary ships, and nothing took over.
 
-# All eight units, all enabled. The robot is the common case: a board with
+# All nine units, all enabled. The robot is the common case: a board with
 # servos, a camera, a ToF sensor and a gamepad should come up working, and
 # needing to remember an enable command per daemon is how a robot ends up half
 # running with nothing obviously wrong.
@@ -248,7 +256,7 @@ USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport a
 # robot-boot-check.service has no [Install] by design -- only its timer starts it
 # -- so the timer is what gets enabled.
 SYSTEMD_PACKAGES = "${PN} ${PN}-padd"
-SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service robot-boot-check.timer microduck-voice-bank.service"
+SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service robot-boot-check.timer microduck-voice-bank.service"
 SYSTEMD_SERVICE:${PN}-padd = "padd.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
@@ -343,6 +351,7 @@ do_install:append() {
 	install -m 0644 ${S}/mediad/systemd/mediad.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/tof/systemd/tofd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/nfc/systemd/nfcd.service ${D}${systemd_system_unitdir}/
+	install -m 0644 ${S}/netpadd/systemd/netpadd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/padd/systemd/padd.service ${D}${systemd_system_unitdir}/
 
 	# The boot recovery net, verbatim from the release: the timer runs
