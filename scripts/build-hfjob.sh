@@ -63,6 +63,8 @@ done
 # so a release the image cannot seed is refused before the job bills anything.
 # Its `daemon: ...` line on stderr is what CI copies into the run summary.
 daemon=$(scripts/daemon-release.sh "${HFJOB_DAEMON_VERSION:-latest}")
+# The bundle's RAUC version: the newest OS release (scripts/os-release.sh).
+os_version=$(scripts/os-release.sh)
 
 # The RAUC signing pair, needed only when the target is the bundle.
 #
@@ -146,7 +148,7 @@ fi
 if [ -n "$KAS_EXTRA" ]; then
 	set -- "$@" -e "KAS_EXTRA=$KAS_EXTRA"
 fi
-for kv in $daemon; do
+for kv in $daemon MICRODUCK_OS_VERSION=$os_version; do
 	set -- "$@" -e "$kv"
 done
 if [ -n "${HFJOB_SSH_KEY:-}" ]; then
