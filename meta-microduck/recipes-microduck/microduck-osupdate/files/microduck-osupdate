@@ -149,7 +149,8 @@ apply() {
 	from=$(booted_name)
 	if ! rauc install "$part" > "$STATE/rauc.log" 2>&1; then
 		rm -f "$part"
-		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)"
+		hint=; production && hint=" (this board takes production-signed stable builds only)"
+		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)$hint"
 	fi
 	rm -f "$part"
 	printf 'VERSION=%s\nBUILD=%s\nFROM=%s\n' "$version" "$build" "$from" > "$STATE/pending.env"
