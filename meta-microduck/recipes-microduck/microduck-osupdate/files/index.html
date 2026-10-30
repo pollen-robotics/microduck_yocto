@@ -163,6 +163,8 @@ async function poll() {
     $("msg").textContent = last && last.phase === "rebooting"
       ? "Rebooting… this page reconnects by itself." : "Robot unreachable (" + e.message + ")";
   }
+  // Each poll is a process on the robot: fast only while something is happening.
+  setTimeout(poll, last && last.phase === "idle" ? 10000 : 2000);
 }
 
 $("builds").onchange = () => last && show(last);
@@ -177,7 +179,6 @@ $("switch").onclick = async () => {
   show(await call("POST", "/api/switch"));
 };
 poll();
-setInterval(poll, 2000);
 </script>
 </body>
 </html>
