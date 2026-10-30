@@ -21,7 +21,6 @@ require recipes-core/images/microduck-image.bb
 IMAGE_FEATURES += "allow-empty-password allow-root-login empty-root-password"
 
 IMAGE_INSTALL:append = " \
-    microduck-daemon-padd \
     microduck-daemon-devkey \
     rauc-conf-dev-ca \
     microduck-daemon-bash-completion \
@@ -90,10 +89,9 @@ IMAGE_INSTALL:append = " \
 # mid-run. update-alternatives puts the GNU versions ahead of the applets, so a
 # script written against either one works.
 #
-# microduck-daemon-padd and evtest are the gamepad pair. padd is the client the
-# teleop path needs, split out of the daemon package precisely so it could be
-# added here; evtest is how you tell a pad that never bonded from one that bonded
-# and sends nothing, which is the distinction the whole of
+# evtest is the gamepad diagnostic (padd itself comes from microduck-image.bb):
+# it is how you tell a pad that never bonded from one that bonded and sends
+# nothing, which is the distinction the whole of
 # microduck_daemon/docs/robot/pair-a-gamepad.md turns on.
 #
 # tcpdump for the radio (iw is already there, from packagegroup-base-wifi via

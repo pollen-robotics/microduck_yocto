@@ -61,6 +61,7 @@ IMAGE_FEATURES += "ssh-server-openssh"
 
 IMAGE_INSTALL:append = " \
     microduck-daemon \
+    microduck-daemon-padd \
     microduck-board \
     rauc \
     u-boot-rockchip-env \
@@ -109,9 +110,9 @@ IMAGE_INSTALL:append:microduck-beta = " microduck-face-leds microduck-tof-spidev
 # sound.rs), so without it a robot accepts `robotctl quack` and stays silent.
 # Found missing on the first beta board, 2026-10-05.
 
-# microduck-daemon-padd is built but deliberately not installed: it is a gamepad
-# client, and its gilrs/libudev-sys chain is only wanted when someone is
-# teleoperating. microduck-image-dev.bb installs it.
+# microduck-daemon-padd is installed here, not only in the dev image: a shipping
+# robot is driven with a gamepad, and without padd `robotctl health` reports it
+# stopped and a paired pad moves nothing.
 #
 # This recipe is the one that ships. Everything a robot must not carry -- a
 # password-less root login above all -- belongs in microduck-image-dev.bb, which
