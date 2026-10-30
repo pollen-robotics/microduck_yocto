@@ -287,6 +287,11 @@ library root, so nothing crosses a filesystem boundary.
   slot touches it).
 - Does **not** survive: a reflash of the whole `.wic`, which zeros that region.
   Do not describe it as if it did.
+- **Anything outside it is per-slot**, and an install writes a whole fresh slot.
+  BlueZ's bonds in `/var/lib/bluetooth` were: every OTA unpaired the gamepad
+  (measured 2026-10-30: both slots' trees dated from their own install, no pad
+  in either). `var-lib-bluetooth.mount` now bind-mounts them from
+  `/var/lib/robot/bluetooth`, the way the journal and the wifi profiles moved.
 - **A failed mount cascades, and this cost a board its updater.** The daemon
   units carry `StateDirectory=robot/config` and `robot/updater`; systemd turns
   those into an implicit `RequiresMountsFor=/var/lib/robot/...`, i.e. a

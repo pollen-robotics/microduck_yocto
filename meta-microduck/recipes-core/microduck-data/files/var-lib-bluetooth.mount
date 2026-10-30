@@ -1,0 +1,24 @@
+[Unit]
+Description=Persistent Bluetooth bonds on the data partition
+
+# BlueZ keeps every bond (a paired gamepad's keys) under /var/lib/bluetooth. On the
+# rootfs, each RAUC install writes a fresh slot and the pad comes back unpaired.
+#
+# No [Install]: bluez's StateDirectory=bluetooth gives bluetooth.service
+# RequiresMountsFor=/var/lib/bluetooth, which pulls this in and orders it first.
+# The source comes from microduck-data.tmpfiles; nofail drops the implicit
+# Before=local-fs.target, which would cycle with that After=. The condition skips
+# rather than fails, since a failed mount would take bluetooth.service down with
+# it; skipped, BlueZ falls back to the rootfs directory.
+# A *failed* data mount still cascades: systemd makes a bind source's mount a
+# Requires= whatever this file says. configd already Requires= it, so BLE recovery
+# (wifi, logs) is lost in that case anyway; tried Wants= on the board, 2026-10-30.
+RequiresMountsFor=/var/lib/robot
+After=systemd-tmpfiles-setup.service
+ConditionPathIsDirectory=/var/lib/robot/bluetooth
+
+[Mount]
+What=/var/lib/robot/bluetooth
+Where=/var/lib/bluetooth
+Type=none
+Options=bind,nofail
