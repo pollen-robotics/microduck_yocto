@@ -22,13 +22,13 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 # was still connected, and wlan0 never reassociated until the module was
 # reloaded. Found on a beta board on 2026-10-27, reproduced on demand with
 # wpa_supplicant's D-Bus Roam(); the patch says why. Applies in ${S}.
+require seeed-deb-source.inc
 SRC_URI = " \
-    git://github.com/Seeed-Studio/seeed_armbian_extension.git;protocol=https;branch=deb_source \
+    ${SEEED_DEB_SOURCE} \
     file://0001-wq_wlan-report-the-disconnection-on-a-failed-roam.patch \
     file://wq9201s-bt-attach \
     file://wq9201s-bt.service \
 "
-SRCREV = "1f4bd1cbf6e844291a54ca55816c1ac827b6bd02"
 S = "${UNPACKDIR}/${BP}/wq9201s-wifi-bt-dkms"
 
 # Same shape as aic8800_5.0.bb: build in the driver's directory through kbuild.
