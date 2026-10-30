@@ -6,7 +6,8 @@ DDR3), 64 GB eMMC, no SD slot.
 Machine `microduck-beta`, device tree
 `meta-microduck-bsp/recipes-kernel/linux/files/rk3566-microduck-beta.dts`.
 
-**Our image has not run on a board yet.** The DTS compiled against radxa's tree
+Our image runs on the board; "First boot, in order" and "Open items" below say
+what is verified and what is not. The DTS compiled against radxa's tree
 with the same dtc warnings as the Zero 3W's and no new ones, and compiles against
 Armbian's rk-6.1-rkr7.2 (6.1.172, HF job 6ada12a1 on 2026-10-22, with `wq9201s`).
 6.1.172 is also what the beta camera's rkaiq rkr7 needs: Seeed's package refuses
@@ -141,6 +142,9 @@ or `machine: microduck-beta` in the `build-image` workflow dispatch. A push to
 
 ## Flash the eMMC
 
+[`../flashing.md`](../flashing.md) is the short procedure for the factory; this
+section is the background and the cases it leaves out.
+
 The USB-C port is the RK3566's OTG port, which is what the boot ROM's maskrom
 mode talks to. Flashing goes through it, with `rkdeveloptool`.
 
@@ -166,11 +170,12 @@ mode talks to. Flashing goes through it, with `rkdeveloptool`.
      verified on this board.
 
    `lsusb` shows `2207:350a` in either mode.
-3. **Write it.** `loader.bin` is deployed next to the `.wic`:
+3. **Write it.** `loader.bin` is deployed next to the `.wic` (in a release,
+   `<machine>-loader.bin`, and the `.wic.zst` needs `zstd -d` first):
    ```sh
    sudo rkdeveloptool db loader.bin       # runs DRAM init in SRAM
    sudo rkdeveloptool rfi                 # flash info: proves DRAM + eMMC before writing
-   sudo rkdeveloptool wl 0 microduck-image-dev-microduck-beta.rootfs.wic
+   sudo rkdeveloptool wl 0 microduck-image-microduck-beta.rootfs-<date>.wic
    sudo rkdeveloptool rd
    ```
    In loader mode, skip `db`: the loader is already running.

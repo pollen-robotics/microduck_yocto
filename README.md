@@ -13,7 +13,8 @@ new slot does not come up healthy.
 | Board | Machine | Status |
 |---|---|---|
 | Radxa Zero 3W (stand-in for the robot's board) | `microduck-zero3` | boots, updates, rolls back; flashed as an SD card |
-| microduck beta board (Seeed, first spin of the custom PCB) | `microduck-beta` | bring-up; flashed over USB-C to eMMC |
+| microduck beta board (Seeed, first spin of the custom PCB) | `microduck-beta` | runs, open items in [`docs/agents/beta-board.md`](docs/agents/beta-board.md); flashed over USB-C to eMMC |
+| beta board with the V1.0 face board | `microduck-face-board-v1` | what the factory flashes; same as the beta but for the face; flashed over USB-C to eMMC |
 
 ## What is in the image
 
@@ -51,11 +52,13 @@ Zero 3W and publishes its bundle to the `dev` update channel.
 reads the `.zst` directly and writes only the blocks in use):
 
 ```sh
-sudo bmaptool copy --bmap microduck-image-dev-*.wic.bmap microduck-image-dev-*.wic.zst /dev/sdX
+sudo bmaptool copy --bmap microduck-image-microduck-zero3.rootfs-*.wic.bmap \
+  microduck-image-microduck-zero3.rootfs-*.wic.zst /dev/sdX
 ```
 
-**Beta board**: see [`docs/agents/beta-board.md`](docs/agents/beta-board.md)
-for flashing the eMMC with `rkdeveloptool`, including a board stuck in maskrom.
+**Beta and face-board-v1 boards**: [`docs/flashing.md`](docs/flashing.md) is the
+step-by-step for writing the eMMC with `rkdeveloptool`, written for the factory.
+A board stuck in maskrom is in [`docs/agents/beta-board.md`](docs/agents/beta-board.md).
 
 Then give the robot wifi over Bluetooth (`duckctl wifi connect`, from the daemon
 repo). No RTC is fitted, so nothing that uses TLS works until the clock has
@@ -201,6 +204,7 @@ meta-microduck-bsp/      the boards: machine confs, kernel, U-Boot, radio
                          drivers, camera tuning, partition layout
 meta-microduck-distro/   the distro: init, network stack, what runs by default
 scripts/                 build, publish and test scripts
+docs/flashing.md         flashing a robot's eMMC, for the factory
 docs/agents/             deep notes, each a list of things that bite
 ```
 
