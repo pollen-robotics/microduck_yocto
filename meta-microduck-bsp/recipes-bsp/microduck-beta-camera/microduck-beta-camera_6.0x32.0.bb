@@ -15,12 +15,12 @@ LIC_FILES_CHKSUM = "file://NOTICE;md5=9645f39e9db895a4aa6e02cb57294595"
 # file's format follows rkaiq's version, Seeed tuned this module against
 # v6.0x32, and meta-rockchip builds a 2024-04 snapshot (v6.0x6.1). Same source
 # commit as recipes-kernel/wq9201s.
+require recipes-kernel/wq9201s/seeed-deb-source.inc
 SRC_URI = " \
-    git://github.com/Seeed-Studio/seeed_armbian_extension.git;protocol=https;branch=deb_source \
+    ${SEEED_DEB_SOURCE} \
     file://rkaiq_3A.service \
     file://mediad-rkaiq.conf \
 "
-SRCREV = "1f4bd1cbf6e844291a54ca55816c1ac827b6bd02"
 S = "${UNPACKDIR}/${BP}/camera_engine_rkaiq"
 
 COMPATIBLE_MACHINE = "microduck-beta"
