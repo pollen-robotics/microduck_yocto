@@ -20,6 +20,9 @@ require recipes-core/images/microduck-image.bb
 # nooelint: oelint.var.badimagefeature
 IMAGE_FEATURES += "allow-empty-password allow-root-login empty-root-password"
 
+# The dev bundle's build id is plain DATETIME, meta-rauc's RAUC_BUNDLE_BUILD default.
+MICRODUCK_BUILD_ID = "${DATETIME}"
+
 IMAGE_INSTALL:append = " \
     microduck-daemon-devkey \
     rauc-conf-dev-ca \

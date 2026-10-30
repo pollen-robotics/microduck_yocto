@@ -57,6 +57,18 @@ gen_rkparameter() {
 	:
 }
 
+# The build id of the bundle that carries this image, as os-release's BUILD_ID.
+# RAUC records a slot's build only when it installs a bundle there, so a flashed
+# card had none and microduck-osupdate could only say "the flashed image".
+# microduck-image-dev.bb sets the dev bundle's id instead.
+require recipes-core/images/microduck-build-id.inc
+MICRODUCK_BUILD_ID = "${MICRODUCK_SHIPPING_BUILD}"
+MICRODUCK_BUILD_ID[vardepsexclude] = "DATETIME"
+ROOTFS_POSTPROCESS_COMMAND += "microduck_build_id"
+microduck_build_id() {
+	echo 'BUILD_ID="${MICRODUCK_BUILD_ID}"' >> ${IMAGE_ROOTFS}${nonarch_libdir}/os-release
+}
+
 IMAGE_FEATURES += "ssh-server-openssh"
 
 IMAGE_INSTALL:append = " \

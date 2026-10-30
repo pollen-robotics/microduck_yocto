@@ -65,6 +65,13 @@ function label(b, s) {
   return t;
 }
 
+// A build by its version when the index lists it: "1.0.1 (20261029170631)".
+function named(build, s) {
+  if (!build) return "the flashed image";
+  const b = s.builds.find((x) => x.build === build);
+  return b ? b.version + " (" + build + ")" : build;
+}
+
 // The list, grouped by channel, newest first; the channel's newest is "latest".
 function fillBuilds(s) {
   const key = JSON.stringify(s.builds) + s.installed_build + (s.other && s.other.build);
@@ -96,7 +103,7 @@ function show(s) {
   const busy = s.phase !== "idle";
   $("machine").textContent = s.machine || "?";
   $("channel").textContent = s.channel;
-  $("installed").textContent = (s.installed_build || "the flashed image") + " (slot " + s.slot + ")";
+  $("installed").textContent = named(s.installed_build, s) + " (slot " + s.slot + ")";
   $("phase").textContent = s.phase;
   $("result").textContent = s.last_result || "—";
   $("msg").textContent = s.message || "";
@@ -108,7 +115,7 @@ function show(s) {
   $("check").disabled = busy;
   const o = s.other || {};
   $("oslot").textContent = o.slot || "?";
-  $("obuild").textContent = (o.build || "the flashed image") +
+  $("obuild").textContent = named(o.build, s) +
     (o.installed ? ", installed " + o.installed : "") + (o.good ? " — good" : " — not marked good");
   $("switch").disabled = busy || !o.good;
 }
