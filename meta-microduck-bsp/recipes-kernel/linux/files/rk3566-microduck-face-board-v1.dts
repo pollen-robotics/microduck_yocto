@@ -10,10 +10,9 @@
  * new button. Everything else on the face board connector (PDM mic, ToF on
  * SPI3, IMU on I2C3) is wired as on the beta.
  *
- * Which channel lights which LED is not described here yet: the labels are the
- * driver channels (face:ledN = the AW21009's LEDn pin, face:rgb:N = the
- * AW2023's LEDN), to be renamed once checked on a board. They keep the face:
- * prefix so 70-microduck-face-leds.rules hands them to the robot group.
+ * Channel-to-LED mapping checked on a V1.0 board (sch_261020): the labels
+ * below are the V0 face board's names for the same physical LEDs, so the
+ * udev rule and robotctl led address them unchanged.
  */
 
 #include "rk3566-microduck-beta.dts"
@@ -48,15 +47,15 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		led@1 { reg = <1>; label = "face:led1"; };
-		led@2 { reg = <2>; label = "face:led2"; };
-		led@3 { reg = <3>; label = "face:led3"; };
-		led@4 { reg = <4>; label = "face:led4"; };
-		led@5 { reg = <5>; label = "face:led5"; };
-		led@6 { reg = <6>; label = "face:led6"; };
-		led@7 { reg = <7>; label = "face:led7"; };
-		led@8 { reg = <8>; label = "face:led8"; };
-		led@9 { reg = <9>; label = "face:led9"; };
+		led@1 { reg = <1>; label = "face:gr1:red"; };
+		led@2 { reg = <2>; label = "face:gr1:green"; };
+		led@3 { reg = <3>; label = "face:green2:green"; };
+		led@4 { reg = <4>; label = "face:green1:green"; linux,default-trigger = "heartbeat"; };
+		led@5 { reg = <5>; label = "face:gb:green"; };
+		led@6 { reg = <6>; label = "face:gb:blue"; };
+		led@7 { reg = <7>; label = "face:gr2:green"; };
+		led@8 { reg = <8>; label = "face:gr2:red"; };
+		led@9 { reg = <9>; label = "face:cam:red"; };
 	};
 
 	led-controller@45 {
@@ -70,9 +69,9 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		led@0 { reg = <0>; label = "face:rgb:0"; };
-		led@1 { reg = <1>; label = "face:rgb:1"; };
-		led@2 { reg = <2>; label = "face:rgb:2"; };
+		led@0 { reg = <0>; label = "face:rgb:blue"; };
+		led@1 { reg = <1>; label = "face:rgb:green"; };
+		led@2 { reg = <2>; label = "face:rgb:red"; };
 	};
 };
 

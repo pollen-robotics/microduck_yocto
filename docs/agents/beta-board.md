@@ -288,10 +288,8 @@ kas build kas/microduck.yml:kas/face-board-v1.yml
 HFJOB_MACHINE=microduck-face-board-v1 scripts/build-hfjob.sh
 ```
 
-**Not run on a board yet.** The LEDs are named after driver channels
-(`face:led1`..`face:led9` = AW21009 pins LED1..LED9, `face:rgb:0..2` = AW2023
-LED0..2), not after what they light: rename them once checked on a board, and
-until then `robotctl led`'s face names do not exist on this machine. The
+Checked on a V1.0 board: all twelve LEDs light and carry the V0 face board's
+`face:*` names, so the udev rule and `robotctl led` work unchanged. The
 AW21009 driver (patch 0006) is ours and minimal: one LED per channel, 8-bit PWM,
 full scale set by the board's ISET resistor. Seeed's AW210xx port exposes the
 chip as one LED with vendor sysfs files instead and is not used.
