@@ -1,7 +1,7 @@
 # Flashing a microduck in the factory
 
 How to write the microduck OS onto a robot's eMMC for the first time, from a
-Linux PC. The procedure is for the microduck main board with the **V1.0 face
+Linux PC or a Mac. The procedure is for the microduck main board with the **V1.0 face
 board** (machine `microduck-face-board-v1`). After this first flash the robot
 updates itself over the network, so this is done once per robot.
 
@@ -11,6 +11,7 @@ updates itself over the network, so this is done once per robot.
   ```sh
   sudo apt install rkdeveloptool zstd
   ```
+  or a Mac: see [On a Mac](#on-a-mac).
 - A USB-C **data** cable. A charge-only cable shows nothing in `lsusb`.
 - The robot's battery, or a bench supply on the battery input. USB-C alone
   does not start the board.
@@ -79,6 +80,40 @@ face LEDs will not work.
 6. **Power-cycle**: switch the power off, then on. **Do not use
    `rkdeveloptool rd`** (reset): after a reset the board often hangs at boot
    until its power is removed. A real power-off does not have this problem.
+
+## On a Mac
+
+The procedure is the same. What differs:
+
+- **Install** with [Homebrew](https://brew.sh):
+  ```sh
+  brew install gh zstd pierre-rouanet/tools/rkdeveloptool
+  ```
+- **No `sudo`** in front of `rkdeveloptool`.
+- **Click Allow** when macOS asks whether to let the accessory connect. It asks
+  when the robot enters flashing mode, and again after `db`, because the
+  loader comes back as a new USB device. Until you click, `ld` lists nothing.
+- **Checksum**: `shasum -a 256 -c` instead of `sha256sum -c`.
+- **Serial console**: `/dev/cu.usbmodem*` instead of `/dev/ttyACM0`, for
+  example `screen /dev/cu.usbmodem* 115200`.
+- **Network**: the robot shows up in System Settings > Network as a new
+  interface and gets its address on its own; `ssh microduck@192.168.42.1`
+  works the same.
+
+### With the script
+
+`scripts/flash-emmc.sh` does the whole procedure above, on a Mac or on Linux:
+it downloads the release once, checks the checksum and the loader's DRAM
+init, decompresses the image, waits for the robot, runs `db` if it is in
+Maskrom, then `rfi` and `wl`.
+
+```sh
+scripts/flash-emmc.sh microduck-os-v1.0.1
+```
+
+Without a tag it takes the latest release. The files stay in
+`~/microduck-flash/<tag>`, so for the next robot just run it again and put
+the robot in flashing mode. Power-cycling at the end is still up to you.
 
 ## Check the robot booted
 
