@@ -37,7 +37,13 @@ phase() { printf '%s\n' "$1" > "$STATE/phase"; }
 fail() { say "$*"; phase idle; exit 1; }
 matches() { printf '%s' "$1" | grep -Eqx -- "$2"; }
 
-rauc_json() { rauc status --detailed --output-format=json 2>/dev/null; }
+# status reads it seven times and the page polls status, so status sets RAUC_JSON
+# once: each rauc call costs ~50 ms CPU here and ~70 ms in rauc.service (measured
+# on a Zero 3W: a status went from ~1.4 s CPU in total to ~0.7 s).
+rauc_json() {
+	if [ -n "${RAUC_JSON:-}" ]; then printf '%s\n' "$RAUC_JSON"
+	else rauc status --detailed --output-format=json 2>/dev/null; fi
+}
 machine() { rauc_json | grep -o '"compatible":"[^"]*"' | head -n 1 | cut -d'"' -f4; }
 # The booted slot's object, one per line after the split. "build" is the bundle's
 # RAUC_BUNDLE_BUILD, recorded by RAUC at install; a flashed slot has none.
@@ -198,6 +204,7 @@ boot_report() {
 jstr() { printf '"%s"' "$(printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 
 status() {
+	RAUC_JSON=$(rauc_json)
 	ph=$(cat "$STATE/phase" 2>/dev/null || echo idle)
 	progress=0
 	a=$STATE/available.env
