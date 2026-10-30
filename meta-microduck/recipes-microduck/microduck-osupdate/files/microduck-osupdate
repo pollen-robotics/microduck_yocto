@@ -42,7 +42,14 @@ machine() { rauc_json | grep -o '"compatible":"[^"]*"' | head -n 1 | cut -d'"' -
 # The booted slot's object, one per line after the split. "build" is the bundle's
 # RAUC_BUNDLE_BUILD, recorded by RAUC at install; a flashed slot has none.
 booted_slot_json() { rauc_json | sed 's/{"rootfs\./\n&/g' | grep '"state":"booted"' || true; }
-installed_build() { booted_slot_json | grep -o '"build":"[0-9]*"' | head -n 1 | cut -d'"' -f4; }
+rauc_build() { booted_slot_json | grep -o '"build":"[0-9]*"' | head -n 1 | cut -d'"' -f4; }
+# A flashed slot's id is the one its image carries (microduck-image.bb), empty on
+# an image from before that.
+installed_build() {
+	b=$(rauc_build)
+	[ -n "$b" ] || b=$(sed -n 's/^BUILD_ID="\([0-9]\{14\}\)"$/\1/p' /etc/os-release)
+	echo "$b"
+}
 booted_name() { booted_slot_json | grep -o '"bootname":"[^"]*"' | head -n 1 | cut -d'"' -f4; }
 booted_good() { booted_slot_json | grep -q '"boot_status":"good"'; }
 # The other slot: the one that is not booted (two slots, so exactly one).
@@ -142,7 +149,8 @@ apply() {
 	from=$(booted_name)
 	if ! rauc install "$part" > "$STATE/rauc.log" 2>&1; then
 		rm -f "$part"
-		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)"
+		hint=; production && hint=" (this board takes production-signed stable builds only)"
+		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)$hint"
 	fi
 	rm -f "$part"
 	printf 'VERSION=%s\nBUILD=%s\nFROM=%s\n' "$version" "$build" "$from" > "$STATE/pending.env"
@@ -177,7 +185,8 @@ boot_report() {
 	[ -f "$p" ] || exit 0
 	build=$(field "$p" BUILD); version=$(field "$p" VERSION); from=$(field "$p" FROM)
 	how=$(field "$p" HOW); how=${how:-updated}
-	if [ "$(installed_build)" = "$build" ]; then
+	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
+	if [ "$(rauc_build)" = "$build" ]; then
 		if booted_good; then r="$how to $version"; else r="booted $version, but it did not pass the health check"; fi
 	else
 		r="rolled back: $version did not come up, back on slot $(booted_name)"
@@ -204,8 +213,9 @@ status() {
 	other="{\"slot\":$(jstr "$(other_name)"),\"build\":$(jstr "$(other_build)"),\"good\":$og,\"installed\":$(jstr "$(other_installed)")}"
 	# The index lines passed load_index's pattern, so they hold no quote to escape.
 	builds=$(awk '{printf "%s{\"channel\":\"%s\",\"build\":\"%s\",\"version\":\"%s\"}", (NR > 1 ? "," : ""), $1, $2, $3}' "$STATE/index.txt" 2>/dev/null || true)
-	printf '{"machine":%s,"channel":%s,"slot":%s,"installed_build":%s,"available":%s,"other":%s,"builds":[%s],"phase":%s,"progress":%d,"message":%s,"last_result":%s}\n' \
-		"$(jstr "$(machine)")" "$(jstr "$CHANNEL")" "$(jstr "$(booted_name)")" \
+	prod=false; production && prod=true
+	printf '{"machine":%s,"channel":%s,"production":%s,"slot":%s,"installed_build":%s,"available":%s,"other":%s,"builds":[%s],"phase":%s,"progress":%d,"message":%s,"last_result":%s}\n' \
+		"$(jstr "$(machine)")" "$(jstr "$CHANNEL")" "$prod" "$(jstr "$(booted_name)")" \
 		"$(jstr "$(installed_build)")" "$avail" "$other" "$builds" "$(jstr "$ph")" "$progress" \
 		"$(jstr "$(cat "$STATE/message" 2>/dev/null || true)")" \
 		"$(jstr "$(cat "$STATE/result" 2>/dev/null || true)")"
