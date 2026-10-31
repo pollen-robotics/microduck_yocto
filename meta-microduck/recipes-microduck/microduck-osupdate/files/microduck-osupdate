@@ -112,12 +112,22 @@ check() {
 	say "checked $CHANNEL: $(field "$STATE/available.env" VERSION)"
 }
 
+# updaterd takes this lock to install, roll back or select a daemon release, and
+# an update here ends in a reboot that must not land in the middle of one. Held
+# until this script exits, just after it asks for the reboot.
+daemon_lock() {
+	[ -d /var/lib/robot/updater ] || return 0
+	exec 8>> /var/lib/robot/updater/update.lock
+	flock -n 8 || fail "a daemon update is running; try again once it has finished"
+}
+
 # apply [BUILD]: the channel's newest build, or a chosen one from the index --
 # a dev branch, a given stable release, or an older build to go back to. Choosing
 # is an explicit act, so an older build is allowed here -- on a dev board only.
 apply() {
 	exec 9> "$STATE/lock"
 	flock -n 9 || fail "an update is already running"
+	daemon_lock
 	phase checking
 	board_machine
 	if [ -n "${1:-}" ]; then
@@ -147,7 +157,9 @@ apply() {
 	part=$STATE/bundle.raucb.part
 	[ ! -f "$part" ] || [ "$(cat "$STATE/bundle.build" 2>/dev/null)" = "$build" ] || rm -f "$part"
 	echo "$build" > "$STATE/bundle.build"
-	curl -fsSL --retry 5 --retry-delay 5 -C - -o "$part" "$url" || fail "download failed (it resumes on the next try)"
+	# A stalled connection gives up and is retried rather than holding daemon_lock.
+	curl -fsSL --retry 5 --retry-delay 5 --speed-limit 1024 --speed-time 60 -C - -o "$part" "$url" ||
+		fail "download failed (it resumes on the next try)"
 	[ "$(wc -c < "$part")" = "$size" ] || { rm -f "$part"; fail "downloaded size is not $size"; }
 	[ "$(sha256sum "$part" | cut -d' ' -f1)" = "$sha256" ] || { rm -f "$part"; fail "sha256 mismatch"; }
 
@@ -183,6 +195,7 @@ switch_slot() {
 switch() {
 	exec 9> "$STATE/lock"
 	flock -n 9 || fail "an update is already running"
+	daemon_lock
 	switch_slot ""
 }
 
