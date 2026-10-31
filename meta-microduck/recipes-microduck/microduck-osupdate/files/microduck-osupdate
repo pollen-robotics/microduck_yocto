@@ -187,8 +187,30 @@ switch() {
 }
 
 boot_report() {
+	# This runs late in boot, after the health check; an apply started since then
+	# holds the lock and reports for itself.
+	exec 9> "$STATE/lock"
+	flock -n 9 || exit 0
 	p=$STATE/pending.env
-	[ -f "$p" ] || exit 0
+	t=$STATE/target.env
+	ph=$(cat "$STATE/phase" 2>/dev/null || true)
+	# RAUC switches the boot order before apply writes pending.env, so a power cut
+	# between the two boots the new build with no pending.env: report it as installed.
+	if [ ! -f "$p" ] && [ "$ph" = installing ] && [ -f "$t" ] &&
+		[ "$(rauc_build)" = "$(field "$t" BUILD)" ]; then
+		v=$(field "$t" VERSION); b=$(field "$t" BUILD)
+		printf 'VERSION=%s\nBUILD=%s\nFROM=\n' "$v" "$b" > "$p"
+	fi
+	if [ ! -f "$p" ]; then
+		# An apply that a power cut or a reboot stopped before it installed anything.
+		# Until the next apply or check, status would go on showing it as under way.
+		case "$ph" in
+		checking | downloading | installing)
+			r="interrupted while $ph; apply again to carry on"
+			printf '%s\n' "$r" > "$STATE/result"; say "$r"; phase idle ;;
+		esac
+		exit 0
+	fi
 	build=$(field "$p" BUILD); version=$(field "$p" VERSION); from=$(field "$p" FROM)
 	how=$(field "$p" HOW); how=${how:-updated}
 	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
