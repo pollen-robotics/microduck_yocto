@@ -50,10 +50,10 @@
 		led@1 { reg = <1>; label = "face:gr1:red"; };
 		led@2 { reg = <2>; label = "face:gr1:green"; };
 		led@3 { reg = <3>; label = "face:green2:green"; };
-		led@4 { reg = <4>; label = "face:green1:green"; linux,default-trigger = "heartbeat"; };
+		led@4 { reg = <4>; label = "face:green1:green"; };
 		led@5 { reg = <5>; label = "face:gb:green"; };
 		led@6 { reg = <6>; label = "face:gb:blue"; };
-		led@7 { reg = <7>; label = "face:gr2:green"; };
+		led@7 { reg = <7>; label = "face:gr2:green"; linux,default-trigger = "heartbeat"; };
 		led@8 { reg = <8>; label = "face:gr2:red"; };
 		led@9 { reg = <9>; label = "face:cam:red"; };
 	};

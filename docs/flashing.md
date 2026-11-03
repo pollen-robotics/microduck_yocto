@@ -119,9 +119,9 @@ the robot in flashing mode. Power-cycling at the end is still up to you.
 
 About 30 seconds after power-on:
 
-- **Face LED**: the green LED double-blinks (a heartbeat), and the fan is off
-  or slow. *LED off and fan at full speed* means it did not boot: power-cycle
-  it once more.
+- **Face LED**: the status LED is green (double-blinking while the robot
+  starts, then blinking or solid), and the fan is off or slow. *LED off and
+  fan at full speed* means it did not boot: power-cycle it once more.
 - **Over the same USB-C cable**: the robot appears as a network link, with the
   robot at `192.168.42.1`. The PC gets an address automatically (on some
   desktops you have to enable the new wired connection).

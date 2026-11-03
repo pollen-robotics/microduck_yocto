@@ -359,9 +359,9 @@ chip as one LED with vendor sysfs files instead and is not used.
   Until this is found: power-cycle, never reboot, including after a flash. The
   next step is a console on UART2 (TP83/TP84) during one failed boot, and
   asking Seeed whether their image survives `reboot`.
-- **Reading the board without a console.** The face LED `green1` runs the
-  heartbeat trigger and the fan probes at full duty, so: LED off + fan full = no
-  kernel; LED solid + fan full = a kernel that panicked (the heartbeat freezes);
+- **Reading the board without a console.** The status LED `gr2:green` runs
+  the heartbeat trigger until robotd takes it over, and the fan probes at full
+  duty, so: LED off + fan full = no kernel; LED solid + fan full = a kernel that panicked (the heartbeat freezes);
   double blink + fan off at idle = up. The Recovery button gets loader mode from
   any of these. There, `rkdeveloptool rl 8128 32768 env.img` reads U-Boot's env
   (4-byte CRC32, then NUL-separated `key=value`), which says what the last boots
