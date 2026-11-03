@@ -204,7 +204,6 @@
 		led-green1 {
 			label = "face:green1:green";
 			gpios = <&face_gpio 1 GPIO_ACTIVE_HIGH>;
-			linux,default-trigger = "heartbeat";
 		};
 
 		led-green2 {
@@ -255,6 +254,7 @@
 		led-gr2-green {
 			label = "face:gr2:green";
 			gpios = <&face_gpio 13 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "heartbeat";
 		};
 	};
 
