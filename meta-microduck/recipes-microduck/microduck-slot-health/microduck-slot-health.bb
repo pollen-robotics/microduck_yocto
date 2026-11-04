@@ -30,7 +30,15 @@ do_install() {
 	install -m 0755 ${UNPACKDIR}/microduck-slot-trial ${D}${libexecdir}/
 }
 
-FILES:${PN} += "${libexecdir}/microduck-slot-health ${libexecdir}/microduck-slot-trial"
+# systemd.bbclass packages only the units in SYSTEMD_SERVICE (and their @/Also=
+# siblings), never a drop-in for another recipe's unit, and bitbake.conf's default
+# FILES does not cover the unit dir: without the .d entry, do_package fails
+# installed-vs-shipped on the drop-in and its directory.
+FILES:${PN} += " \
+    ${libexecdir}/microduck-slot-health \
+    ${libexecdir}/microduck-slot-trial \
+    ${systemd_system_unitdir}/rauc-mark-good.service.d \
+"
 # rauc-mark-good is only an RRECOMMENDS of rauc, and the drop-in extends its unit.
 # u-boot-fw-utils is fw_printenv/fw_setenv, which microduck-slot-trial calls.
 RDEPENDS:${PN} = "rauc rauc-mark-good systemd u-boot-fw-utils"
