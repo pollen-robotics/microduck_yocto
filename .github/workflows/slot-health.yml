@@ -1,8 +1,9 @@
 name: slot-health
 
 # Runs scripts/test-slot-health.sh: every verdict microduck-slot-health can reach,
-# against a fake /sys and stubbed systemctl/uname/rauc. Under a second, no Yocto
-# checkout. Twice, because the script runs under the image's /bin/sh, and dash is the
+# against a fake /sys and stubbed systemctl/uname/rauc; and scripts/test-slot-trial.sh:
+# when microduck-slot-trial ends a slot's trial and what it remembers, against a stubbed
+# U-Boot environment. Under a second each, no Yocto checkout. Twice, because the script runs under the image's /bin/sh, and dash is the
 # strictest POSIX shell a hosted runner has.
 
 on:
@@ -18,3 +19,5 @@ jobs:
       - uses: actions/checkout@v4
       - run: scripts/test-slot-health.sh
       - run: TEST_SH=dash scripts/test-slot-health.sh
+      - run: scripts/test-slot-trial.sh
+      - run: TEST_SH=dash scripts/test-slot-trial.sh

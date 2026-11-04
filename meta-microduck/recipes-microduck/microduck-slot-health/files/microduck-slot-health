@@ -6,8 +6,10 @@
 # here means the slot is never marked good. The daemon's robot-boot-check gets the
 # same verdict on the daemons, because this asks it; its robot-rescue reboots only
 # when a non-golden daemon release is at fault. Otherwise nothing reboots, the slot
-# stays unmarked, and every later reboot counts against it until U-Boot falls back on
-# its own.
+# stays unmarked, and every later reboot counts against it. U-Boot falls back on its
+# own only while the slot is on trial -- installed or switched to, and not yet good
+# once; after that BOOT_ORDER names it alone (microduck-slot-trial), so a failure here
+# on an OS that already passed costs attempts, never the slot.
 #
 # Three questions, the first the daemon's own and the other two about the OS alone,
 # which no daemon rollback could fix:

@@ -93,7 +93,10 @@ same boot again, or a rollback) is logged and forgiven, so a board with a dead o
 not-yet-working chip can still update and roll back. `scripts/test-slot-health.sh`
 runs every case. An unhealthy slot is left unmarked rather than rebooted; each later
 reboot into it uses up one of its attempts, and when they run out U-Boot boots the
-other slot.
+other slot -- but only while the slot is on trial, from an install or a switch to its
+first good boot. After that `BOOT_ORDER` names it alone, so early power cuts or a
+failure on an OS that already passed never move the robot to its other OS
+(`microduck-slot-trial`, `scripts/test-slot-trial.sh`; `docs/agents/rauc.md`).
 
 **A slot with no network looks exactly like one that did not boot.** Check over
 Bluetooth (`duckctl scan`, `duckctl health`) before concluding it failed.

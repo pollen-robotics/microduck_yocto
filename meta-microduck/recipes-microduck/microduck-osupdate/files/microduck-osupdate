@@ -62,8 +62,15 @@ booted_good() { booted_slot_json | grep -q '"boot_status":"good"'; }
 other_slot_json() { rauc_json | sed 's/{"rootfs\./\n&/g' | grep '"bootname"' | grep -v '"state":"booted"' || true; }
 other_build() { other_slot_json | grep -o '"build":"[0-9]*"' | head -n 1 | cut -d'"' -f4; }
 other_name() { other_slot_json | grep -o '"bootname":"[^"]*"' | head -n 1 | cut -d'"' -f4; }
-other_good() { other_slot_json | grep -q '"boot_status":"good"'; }
 other_installed() { other_slot_json | grep -o '"installed":{"timestamp":"[^"]*"' | head -n 1 | cut -d'"' -f6; }
+# Good: RAUC still calls it good, or microduck-slot-trial recorded its OS as good on
+# this board. RAUC alone is not enough: once a slot's trial ends, BOOT_ORDER names only
+# that slot, and RAUC reads every slot BOOT_ORDER does not name as bad.
+GOOD_RECORD=/var/lib/robot/slot-health/good
+other_good() {
+	other_slot_json | grep -q '"boot_status":"good"' ||
+		grep -qx "$(other_name)@$(other_installed)" "$GOOD_RECORD" 2>/dev/null
+}
 
 # field FILE KEY: the first KEY= line's value.
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
@@ -168,7 +175,8 @@ apply() {
 }
 
 # Boot the other slot as it is: the rollback that needs no download. Only a slot
-# RAUC last saw good; the health gate then judges this boot like any other.
+# known good (other_good); mark-active puts it on trial, so if it no longer comes up
+# U-Boot falls back to this one, and the health gate judges it like any other boot.
 switch_slot() {
 	other_good || fail "slot $(other_name) is not marked good; not booting it"
 	from=$(booted_name)

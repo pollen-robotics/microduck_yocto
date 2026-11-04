@@ -322,15 +322,58 @@ turns that into `systemd-growfs-root.service`, which grows `/` online at boot; o
 the board it took 69 ms. Do not "fix" this with `IMAGE_ROOTFS_SIZE`: every bundle
 would then carry 2 GiB.
 
+## Fallback only on trial
+
+**U-Boot switches slots on its own only while a slot is on trial**: from a `rauc
+install` or a `switch` (`rauc status mark-active`) to that slot's first good boot.
+After that the robot stays on it, whatever happens to its boots.
+
+Why, from a beta board on 2026-11-04. U-Boot's script spends one of
+`BOOT_<slot>_LEFT`'s three attempts on every boot, and only `rauc-mark-good` gives
+them back — ~93 s in on that board (a 90 s wait for `/dev/ttyFIQ0`), ~25 s on a
+healthy one. With both slots in `BOOT_ORDER`, three boots in a row cut before that
+(the journal shows two at ~37 s with no shutdown) moved the robot onto its other OS.
+Nothing was wrong with the OS; the motor bus was what was being debugged. A missing
+motor never fails the health gate itself (robotd waits for its hardware), but a robot
+that does not move gets power-cycled.
+
+How, with no U-Boot change (a bundle cannot update U-Boot):
+
+- `microduck-slot-trial`, run as `ExecStartPost=` of `rauc-mark-good.service`
+  (drop-in in `recipes-microduck/microduck-slot-health`), sets `BOOT_ORDER` to the
+  booted slot alone once it has passed. On a one-slot order, running out of
+  attempts resets both counters and boots the same slot again, as a fresh card
+  always has.
+- RAUC's `set_primary` (`src/bootloaders/uboot.c`, v1.15.2) builds the new order as
+  the new slot followed by **every slot already in `BOOT_ORDER`**, so from `"B"` an
+  install into A gives `"A B"`: on trial, with B as its fallback. Verified by
+  reading the source at the pinned version, not yet on hardware.
+- RAUC calls a slot `good` only if `BOOT_ORDER` names it (`r_uboot_get_state`), so
+  after a trial **`rauc status` shows the other slot as `bad` whatever it holds**.
+  `microduck-osupdate switch` refused bad slots, so the script also keeps
+  `/var/lib/robot/slot-health/good`: one `<bootname>@<installed timestamp>` per OS
+  known good on this board, the same id `microduck-slot-health` uses. It records
+  the other slot too if RAUC still calls it good at that moment (read before the
+  order changes), and drops an id once its slot is rewritten. `other_good` in
+  osupdate accepts either RAUC's word or that record.
+
+What it gives up: an OS that has passed once and later stops booting on its own
+(a corrupted filesystem, a hang that started later) no longer falls back
+automatically; the robot loops on it. That is `switch` (if it is reachable) or a
+reflash. The trade is deliberate: such a robot is rare, and one reverted over a
+battery or a motor is not. An update that never comes up still rolls back.
+
+`scripts/test-slot-trial.sh` runs every case (CI: `slot-health.yml`).
+
 ## What is not done
 
 - `boot_b` is reserved and empty; the kernel's A/B is the slots' `/boot` (above).
-- **A fresh card is pinned to slot A** (since 2026-10-06, temporarily): U-Boot
-  seeds `BOOT_ORDER="A"`, not `"A B"`, so B is only booted when a RAUC install
-  puts it first. When A's attempts run out, both counters reset and the board
-  resets onto A. Bring-up kept landing on B after a few quick reboots. To pin a
-  running board: `fw_setenv BOOT_ORDER A`. Since `uboot_env` is written at flash
-  time (#24), every flashing tool now gives a fresh card the default order.
+- **A fresh card seeds `BOOT_ORDER="A"`**, not `"A B"`, so B is only booted when
+  a RAUC install or a `switch` puts it first. It started (2026-10-06) as a
+  temporary pin after bring-up kept landing on B; it is now the design (next
+  section), and the U-Boot patch's "put A B back" note is obsolete. Since
+  `uboot_env` is written at flash time (#24), every flashing tool gives a fresh
+  card that order.
 - **A fresh card fills `rootfs_b` with the same rootfs as A** (since
   2026-10-06). Before that it was empty, and U-Boot's script still falls back
   to B once `BOOT_A_LEFT` reaches 0, booting the shared kernel onto nothing: a
