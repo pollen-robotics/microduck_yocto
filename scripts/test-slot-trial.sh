@@ -115,6 +115,20 @@ run
 check "a pending install or switch: order left as B A" '[ $code = 0 ] && [ "$(order)" = "B A" ] && [ ! -f "$STUB/writes" ]'
 check "and its never-booted OS is not recorded as good" '! grep -q "^B@" "$GOOD" 2>/dev/null'
 
+# The same, in every spelling of the counter: zero ends the trial, non-zero is pending.
+for v in 0 00 0x00; do
+	fresh "zero-$v" A "B A"; a_status=good; b_status=bad; b_ts=2026-11-05T09:00:00Z; rauc_json
+	echo "$v" > "$STUB/env/BOOT_B_LEFT"
+	run
+	check "BOOT_B_LEFT=$v is a fallback: order collapses to A" '[ "$(order)" = A ]'
+done
+for v in 0x2 08 1; do
+	fresh "left-$v" A "B A"; a_status=good; b_status=good; b_ts=2026-11-05T09:00:00Z; rauc_json
+	echo "$v" > "$STUB/env/BOOT_B_LEFT"
+	run
+	check "BOOT_B_LEFT=$v is pending: order left as B A" '[ $code = 0 ] && [ "$(order)" = "B A" ]'
+done
+
 # A slot rewritten by an install forgets its old OS: a stale id never vouches for it.
 fresh reinstalled A "A"; a_status=good; b_ts=2026-11-05T09:00:00Z; rauc_json
 mkdir -p "$(dirname "$GOOD")"; printf 'A@\nB@2026-10-30T13:25:07Z\n' > "$GOOD"

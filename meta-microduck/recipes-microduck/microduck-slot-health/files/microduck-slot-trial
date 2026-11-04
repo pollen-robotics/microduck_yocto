@@ -56,17 +56,17 @@ theirs=$(os_id "$other")
 # reboot that follows (osupdate leaves ~3 s, an install can finish before a slow
 # mark-good). Collapsing now would undo it, and RAUC calls that slot good only because
 # it is about to try it. First with none left is U-Boot's fallback: end the trial.
-# U-Boot's setexpr writes the counter in hex ("0x0"), RAUC in decimal.
+# U-Boot's setexpr writes the counter in hex ("0x0"), RAUC in decimal; any spelling of
+# zero counts, as the boot command's own `setexpr ... + 0` does. Matched, not computed:
+# $(( )) on a malformed value aborts the shell, and reads "08" as bad octal.
+is_zero() { printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
 order=$(fw_printenv -n BOOT_ORDER 2>/dev/null || true)
 case $order in
 "$other"*)
-	case $(fw_printenv -n "BOOT_${other}_LEFT" 2>/dev/null) in
-	0 | 0x0) ;;
-	*)
+	if ! is_zero "$(fw_printenv -n "BOOT_${other}_LEFT" 2>/dev/null || true)"; then
 		echo "slot $other is first in BOOT_ORDER '$order' (an install or switch is pending); left alone"
 		exit 0
-		;;
-	esac
+	fi
 	;;
 esac
 
