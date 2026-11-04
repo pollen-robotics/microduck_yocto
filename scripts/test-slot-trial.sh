@@ -100,9 +100,20 @@ check "both OSes known good" '[ "$(sort "$GOOD" | tr "\n" " ")" = "A@ B@2026-11-
 
 # An update that failed: B ran out of attempts, U-Boot fell back to A, A passes.
 fresh update-failed A "B A"; a_status=good; b_status=bad; b_ts=2026-11-05T09:00:00Z; rauc_json
+# As U-Boot's setexpr leaves it: hex (seen on a Zero 3W).
+echo 0x0 > "$STUB/env/BOOT_B_LEFT"
 run
 check "after a failed trial, the good slot is left alone in the order" '[ "$(order)" = A ]'
 check "the OS that failed its trial is not known good" '! grep -q "^B@" "$GOOD"'
+
+# An install or switch that finished before this boot's mark-good: "B A" with B's
+# attempts full, A booted, reboot imminent. Collapsing would cancel it (seen on a Zero
+# 3W: `rauc status mark-active other`, then this script, put "A B" back to "B").
+fresh pending A "B A"; a_status=good; b_status=good; b_ts=2026-11-05T09:00:00Z; rauc_json
+echo 3 > "$STUB/env/BOOT_B_LEFT"
+run
+check "a pending install or switch: order left as B A" '[ $code = 0 ] && [ "$(order)" = "B A" ] && [ ! -f "$STUB/writes" ]'
+check "and its never-booted OS is not recorded as good" '! grep -q "^B@" "$GOOD" 2>/dev/null'
 
 # A slot rewritten by an install forgets its old OS: a stale id never vouches for it.
 fresh reinstalled A "A"; a_status=good; b_ts=2026-11-05T09:00:00Z; rauc_json

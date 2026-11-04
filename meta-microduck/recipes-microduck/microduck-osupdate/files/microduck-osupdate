@@ -160,6 +160,9 @@ apply() {
 
 	phase installing; say "installing $version"
 	from=$(booted_name)
+	# The other slot is about to be overwritten. An install that dies partway can leave
+	# its installed timestamp unchanged, and then the old record line would still vouch for it.
+	sed -i "/^$(other_name)@/d" "$GOOD_RECORD" 2>/dev/null || true
 	if ! rauc install "$part" > "$STATE/rauc.log" 2>&1; then
 		rm -f "$part"
 		hint=; production && hint=" (this board takes production-signed stable builds only)"

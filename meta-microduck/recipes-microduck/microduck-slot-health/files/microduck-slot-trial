@@ -52,6 +52,24 @@ os_id() {
 mine=$(os_id "$slot")
 theirs=$(os_id "$other")
 
+# The other slot first with attempts left: an install or a `switch` set it up for the
+# reboot that follows (osupdate leaves ~3 s, an install can finish before a slow
+# mark-good). Collapsing now would undo it, and RAUC calls that slot good only because
+# it is about to try it. First with none left is U-Boot's fallback: end the trial.
+# U-Boot's setexpr writes the counter in hex ("0x0"), RAUC in decimal.
+order=$(fw_printenv -n BOOT_ORDER 2>/dev/null || true)
+case $order in
+"$other"*)
+	case $(fw_printenv -n "BOOT_${other}_LEFT" 2>/dev/null) in
+	0 | 0x0) ;;
+	*)
+		echo "slot $other is first in BOOT_ORDER '$order' (an install or switch is pending); left alone"
+		exit 0
+		;;
+	esac
+	;;
+esac
+
 keep=$mine
 if grep -qx "$theirs" "$GOOD" 2>/dev/null || slot_json "$other" | grep -q '"boot_status":"good"'; then
 	keep="$keep
@@ -63,7 +81,6 @@ mkdir -p "$(dirname "$GOOD")"
 printf '%s\n' "$keep" > "$GOOD.new"
 mv "$GOOD.new" "$GOOD"
 
-order=$(fw_printenv -n BOOT_ORDER 2>/dev/null || true)
 if [ "$order" = "$slot" ]; then
 	echo "slot $slot ($mine) is good and already alone in BOOT_ORDER"
 else
