@@ -1,0 +1,89 @@
+#!/bin/sh
+# End the booted slot's trial: from now on, U-Boot only ever boots this slot.
+#
+# Run by rauc-mark-good.service (ExecStartPost=, our drop-in), so only after a boot
+# that passed microduck-slot-health and that RAUC has just marked good.
+#
+# Why. U-Boot spends one of BOOT_<slot>_LEFT's three attempts on every boot, and only
+# a boot marked good gives them back -- ~90 s in on the beta board. With both slots in
+# BOOT_ORDER, three boots in a row that end before that (a pulled battery, a brownout,
+# someone power-cycling a robot whose motor is unplugged) and U-Boot boots the other
+# slot: a working OS reverted over something it did not cause. That happened on a beta
+# board on 2026-11-04. docs/agents/rauc.md, "Fallback only on trial".
+#
+# The rule: fall back automatically only while a slot is on trial, i.e. between an
+# install or a `switch` (RAUC's set_primary puts the new slot first, "B A") and its
+# first good boot. Then BOOT_ORDER names this slot alone. Running out of attempts on a
+# one-slot order makes U-Boot reset both counters and boot the same slot again -- what
+# a freshly flashed card ("A") already does. The next install puts the other slot back
+# in front, so every new OS still gets its automatic rollback.
+#
+# The cost: RAUC calls a slot good only if BOOT_ORDER names it, so after this the other
+# slot reads "bad" in `rauc status` whatever it holds. microduck-osupdate's `switch`
+# refuses a bad slot, so this script also keeps the record RAUC can no longer give: one
+# "<bootname>@<installed timestamp>" line per OS known good on this board (the same OS
+# id microduck-slot-health uses; empty timestamp for a flashed slot). It holds this OS,
+# and the other slot's OS if it was already there or RAUC still calls it good now --
+# read before BOOT_ORDER changes, so nothing RAUC knew is lost.
+#
+# Paths can be pointed elsewhere for scripts/test-slot-trial.sh.
+set -eu
+
+CMDLINE=${SLOT_TRIAL_CMDLINE:-/proc/cmdline}
+# On the data partition, beside microduck-slot-health's record, so it outlives a
+# rewrite of the slot it describes. microduck-osupdate reads it.
+GOOD=${SLOT_TRIAL_GOOD:-/var/lib/robot/slot-health/good}
+
+# U-Boot's boot script puts the slot it chose on the command line; nothing else does.
+slot=$(tr ' ' '\n' < "$CMDLINE" | sed -n 's/^rauc\.slot=//p' | head -n 1)
+case $slot in
+A) other=B ;;
+B) other=A ;;
+*) echo "no rauc.slot=A|B on the kernel command line; BOOT_ORDER left alone"; exit 0 ;;
+esac
+
+# One slot object per line, as microduck-osupdate splits them. A rauc that fails stops
+# the script here (set -e), before anything is changed.
+json=$(rauc status --detailed --output-format=json)
+slot_json() { printf '%s\n' "$json" | sed 's/{"rootfs\./\n&/g' | grep "\"bootname\":\"$1\"" || true; }
+os_id() {
+	printf '%s@%s' "$1" "$(slot_json "$1" | grep -o '"installed":{"timestamp":"[^"]*"' | head -n 1 | cut -d'"' -f6)"
+}
+mine=$(os_id "$slot")
+theirs=$(os_id "$other")
+
+# The other slot first with attempts left: an install or a `switch` set it up for the
+# reboot that follows (osupdate leaves ~3 s, an install can finish before a slow
+# mark-good). Collapsing now would undo it, and RAUC calls that slot good only because
+# it is about to try it. First with none left is U-Boot's fallback: end the trial.
+# U-Boot's setexpr writes the counter in hex ("0x0"), RAUC in decimal; any spelling of
+# zero counts, as the boot command's own `setexpr ... + 0` does. Matched, not computed:
+# $(( )) on a malformed value aborts the shell, and reads "08" as bad octal.
+is_zero() { printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
+order=$(fw_printenv -n BOOT_ORDER 2>/dev/null || true)
+case $order in
+"$other"*)
+	if ! is_zero "$(fw_printenv -n "BOOT_${other}_LEFT" 2>/dev/null || true)"; then
+		echo "slot $other is first in BOOT_ORDER '$order' (an install or switch is pending); left alone"
+		exit 0
+	fi
+	;;
+esac
+
+keep=$mine
+if grep -qx "$theirs" "$GOOD" 2>/dev/null || slot_json "$other" | grep -q '"boot_status":"good"'; then
+	keep="$keep
+$theirs"
+fi
+# Written before BOOT_ORDER: interrupted in between, the record is complete and the
+# order still names both slots, which is only today's behaviour for one more boot.
+mkdir -p "$(dirname "$GOOD")"
+printf '%s\n' "$keep" > "$GOOD.new"
+mv "$GOOD.new" "$GOOD"
+
+if [ "$order" = "$slot" ]; then
+	echo "slot $slot ($mine) is good and already alone in BOOT_ORDER"
+else
+	fw_setenv BOOT_ORDER "$slot"
+	echo "slot $slot ($mine) passed its trial: BOOT_ORDER '$order' -> '$slot'; known good: $(printf '%s' "$keep" | tr '\n' ' ')"
+fi

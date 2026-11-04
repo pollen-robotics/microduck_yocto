@@ -62,8 +62,17 @@ booted_good() { booted_slot_json | grep -q '"boot_status":"good"'; }
 other_slot_json() { rauc_json | sed 's/{"rootfs\./\n&/g' | grep '"bootname"' | grep -v '"state":"booted"' || true; }
 other_build() { other_slot_json | grep -o '"build":"[0-9]*"' | head -n 1 | cut -d'"' -f4; }
 other_name() { other_slot_json | grep -o '"bootname":"[^"]*"' | head -n 1 | cut -d'"' -f4; }
-other_good() { other_slot_json | grep -q '"boot_status":"good"'; }
 other_installed() { other_slot_json | grep -o '"installed":{"timestamp":"[^"]*"' | head -n 1 | cut -d'"' -f6; }
+# Good: RAUC still calls it good, or microduck-slot-trial recorded its OS as good on
+# this board. RAUC alone is not enough: once a slot's trial ends, BOOT_ORDER names only
+# that slot, and RAUC reads every slot BOOT_ORDER does not name as bad.
+GOOD_RECORD=/var/lib/robot/slot-health/good
+# A BOOT_<slot>_LEFT of zero, or none: U-Boot writes hex ("0x0"), RAUC decimal.
+left_zero() { [ -z "$1" ] || printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
+other_good() {
+	other_slot_json | grep -q '"boot_status":"good"' ||
+		grep -qx "$(other_name)@$(other_installed)" "$GOOD_RECORD" 2>/dev/null
+}
 
 # field FILE KEY: the first KEY= line's value.
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
@@ -153,8 +162,28 @@ apply() {
 
 	phase installing; say "installing $version"
 	from=$(booted_name)
+	# The other slot is about to be overwritten. An install that dies partway can leave
+	# its installed timestamp unchanged, and then the old record line would still vouch
+	# for it. So the line goes now, before rauc runs: a power cut runs no cleanup.
+	to=$(other_name)
+	record=; left=
+	if [ -n "$to" ]; then
+		record=$(grep "^$to@" "$GOOD_RECORD" 2>/dev/null || true)
+		left=$(fw_printenv -n "BOOT_${to}_LEFT" 2>/dev/null || true)
+		sed -i "/^$to@/d" "$GOOD_RECORD" 2>/dev/null || true
+	fi
 	if ! rauc install "$part" > "$STATE/rauc.log" 2>&1; then
 		rm -f "$part"
+		# RAUC sets BOOT_<slot>_LEFT to 0 (r_mark_bad, install.c, v1.15.2) after checking
+		# the bundle and before writing the slot. A counter that was non-zero and still is
+		# means it refused the bundle (signature, compatible, hook) without touching the
+		# slot, which still holds the OS the record vouched for: put the line back, or
+		# `switch` would refuse a slot that works. A counter already 0 tells us nothing,
+		# so the line stays dropped.
+		if [ -n "$record" ] && ! left_zero "$left" &&
+			! left_zero "$(fw_printenv -n "BOOT_${to}_LEFT" 2>/dev/null || true)"; then
+			printf '%s\n' "$record" >> "$GOOD_RECORD"
+		fi
 		hint=; production && hint=" (this board takes production-signed stable builds only)"
 		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)$hint"
 	fi
@@ -168,7 +197,8 @@ apply() {
 }
 
 # Boot the other slot as it is: the rollback that needs no download. Only a slot
-# RAUC last saw good; the health gate then judges this boot like any other.
+# known good (other_good); mark-active puts it on trial, so if it no longer comes up
+# U-Boot falls back to this one, and the health gate judges it like any other boot.
 switch_slot() {
 	other_good || fail "slot $(other_name) is not marked good; not booting it"
 	from=$(booted_name)
