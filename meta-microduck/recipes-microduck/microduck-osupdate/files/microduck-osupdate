@@ -29,7 +29,8 @@ production() { [ ! -e /usr/lib/rauc/ca-dev.cert.pem ]; }
 if production; then CHANNEL=stable; else CHANNEL=dev; fi
 # Root-owned local configuration, so sourcing it is fine (unlike the manifest).
 [ ! -r /etc/microduck-osupdate.conf ] || . /etc/microduck-osupdate.conf
-STATE=/var/lib/robot/osupdate
+# Overridable for scripts/test-osupdate-boot-report.sh only.
+STATE=${MICRODUCK_OSUPDATE_STATE:-/var/lib/robot/osupdate}
 mkdir -p "$STATE"
 
 say() { printf '%s\n' "$*" > "$STATE/message"; echo "$*" >&2; }
@@ -69,6 +70,19 @@ other_installed() { other_slot_json | grep -o '"installed":{"timestamp":"[^"]*"'
 GOOD_RECORD=/var/lib/robot/slot-health/good
 # A BOOT_<slot>_LEFT of zero, or none: U-Boot writes hex ("0x0"), RAUC decimal.
 left_zero() { [ -z "$1" ] || printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
+# Is the booted slot still on trial? First in BOOT_ORDER, with the other slot listed
+# after it and holding attempts: microduck-slot-health reboots such a slot when it
+# fails, and U-Boot then goes back on its own. The same rule as there.
+on_trial() {
+	order=$(fw_printenv -n BOOT_ORDER 2>/dev/null) || return 1
+	# shellcheck disable=SC2086 # split on purpose: the first bootname
+	set -- $order
+	[ "${1:-}" = "$(booted_name)" ] || return 1
+	o=$(other_name)
+	[ -n "$o" ] || return 1
+	case " $order " in *" $o "*) ;; *) return 1 ;; esac
+	! left_zero "$(fw_printenv -n "BOOT_${o}_LEFT" 2>/dev/null)"
+}
 other_good() {
 	other_slot_json | grep -q '"boot_status":"good"' ||
 		grep -qx "$(other_name)@$(other_installed)" "$GOOD_RECORD" 2>/dev/null
@@ -223,7 +237,18 @@ boot_report() {
 	how=$(field "$p" HOW); how=${how:-updated}
 	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
 	if [ "$(rauc_build)" = "$build" ]; then
-		if booted_good; then r="$how to $version"; else r="booted $version, but it did not pass the health check"; fi
+		if booted_good; then
+			r="$how to $version"
+		elif on_trial; then
+			# Not an outcome yet: this boot failed and the slot reboots to try again, or to
+			# go back. Keeping pending.env lets the boot that settles it say which --
+			# "rolled back" from the old slot, or "updated to" once a boot passes.
+			say "$version failed its health check; retrying, and going back if it keeps failing"
+			phase idle
+			exit 0
+		else
+			r="booted $version, but it did not pass the health check"
+		fi
 	else
 		r="rolled back: $version did not come up, back on slot $(booted_name)"
 		[ "$(booted_name)" = "$from" ] || r="$r (was on $from)"

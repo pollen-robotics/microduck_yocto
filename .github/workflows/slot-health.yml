@@ -21,3 +21,5 @@ jobs:
       - run: TEST_SH=dash scripts/test-slot-health.sh
       - run: scripts/test-slot-trial.sh
       - run: TEST_SH=dash scripts/test-slot-trial.sh
+      - run: scripts/test-osupdate-boot-report.sh
+      - run: TEST_SH=dash scripts/test-osupdate-boot-report.sh

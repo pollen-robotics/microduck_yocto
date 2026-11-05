@@ -5,11 +5,18 @@
 # rauc-mark-good.service in turn requires boot-complete.target, so a non-zero exit
 # here means the slot is never marked good. The daemon's robot-boot-check gets the
 # same verdict on the daemons, because this asks it; its robot-rescue reboots only
-# when a non-golden daemon release is at fault. Otherwise nothing reboots, the slot
-# stays unmarked, and every later reboot counts against it. U-Boot falls back on its
-# own only while the slot is on trial -- installed or switched to, and not yet good
-# once; after that BOOT_ORDER names it alone (microduck-slot-trial), so a failure here
-# on an OS that already passed costs attempts, never the slot.
+# when a non-golden daemon release is at fault. U-Boot falls back on its own only
+# while the slot is on trial -- installed or switched to, and not yet good once;
+# after that BOOT_ORDER names it alone (microduck-slot-trial), so a failure here on
+# an OS that already passed costs attempts, never the slot.
+#
+# A slot on trial that fails is rebooted at once, so
+# its three attempts are spent in minutes and U-Boot boots the previous OS, instead
+# of a broken update sitting there until someone power-cycles the robot three
+# times. Only that slot: one that already passed would reboot forever on a
+# one-slot order, and the fallback slot after a failed trial (or a trial whose
+# other slot has no attempts left) would bounce between two bad OSes. Every other
+# failure leaves the slot unmarked and running, as before.
 #
 # Three questions, the first the daemon's own and the other two about the OS alone,
 # which no daemon rollback could fix:
@@ -30,9 +37,10 @@
 #    modules, which loads no wifi driver. The daemons wait for missing hardware by
 #    design, so question 1 passes that boot; this one does not.
 #
-# 3. Did this OS lose a radio the previous OS had? A kernel or driver regression that
-#    drops wifi or Bluetooth leaves a robot nobody can reach, and question 1 passes
-#    it too. Not "is there a radio": the beta board's has been unreliable, and a board
+# 3. Did this OS lose a radio the previous OS had working? A kernel or driver
+#    regression that drops wifi or Bluetooth leaves a robot nobody can reach, and
+#    question 1 passes it too. Working, not just present: NetworkManager can use the
+#    wifi interface, and BlueZ has the adapter powered (scan_radios). Not "is there a radio": the beta board's has been unreliable, and a board
 #    with a dead chip would then fail every boot of every slot and bounce between
 #    them. Instead, each boot that passes records which radios it had and which OS it
 #    was (the slot, and when RAUC wrote it), one line per slot. A *new* OS must have
@@ -43,6 +51,40 @@
 #    A radio still coming up is waited for, until RADIO_DEADLINE: question 1 can now
 #    finish before a slow driver has loaded its firmware, and the radios this OS is
 #    held to are the ones worth waiting for. On the beta board both are up by 12 s.
+#
+# More, each something an OS update can break and that answers the same on a bench
+# board with no servos, camera or network:
+#
+# 4. Does RAUC work? `rauc status` must name the booted slot. An OS whose RAUC
+#    cannot is one no update can ever replace -- the one regression that turns a bad
+#    update into a reflash.
+# 5. Is the data partition mounted, read-write and writable? microduck-data skips a
+#    missing partition on purpose, so the daemons run on the rootfs's empty
+#    /var/lib/robot and the owner's policies, wifi and pad pairing look gone.
+# 6. Did the kernel oops during this boot, when the latest OS that passed did not?
+#    The D bit of /proc/sys/kernel/tainted; not W, the vendor BSP warns on every
+#    boot. Held like a radio, in the same record: on a board whose hardware makes
+#    every kernel oops (a flaky peripheral), the current OS oopses too, and failing
+#    every new one would leave that board unable to take any update. So only a new
+#    OS after a clean one fails; anything else is a warning.
+# 7. Are the OS services a robot is reached through running? A fixed list, not "any
+#    failed unit": a unit allowed to fail (microduck-voice-bank) must not roll back
+#    a good OS.
+# 8. Can this OS take the next OS update? What `os status`, `os check` and `os
+#    apply` need on the robot itself, all read offline -- wifi may well be down, and
+#    a robot booted away from its network must pass:
+#    - `microduck-osupdate status` answers with this board's machine (it reads RAUC
+#      and local state, never the network);
+#    - the RAUC keyring holds a certificate: without one every bundle is refused;
+#    - the U-Boot environment is readable: apply and switch write BOOT_ORDER
+#      through it;
+#    - the CA bundle is there for check and apply's HTTPS, and timesyncd, which TLS
+#      needs on a board with no RTC, is in 7's list -- running, not synchronised.
+#
+# Reported, never failed: the hardware the robot needs that may simply be unplugged
+# or absent on this board -- the motor bus, the camera, the sound card. A missing
+# one is logged so it can be fixed, as robotd reports servos and the IMU, and the
+# slot passes: failing it would roll back a good OS over a cable.
 #
 # Paths can be pointed elsewhere for scripts/test-slot-health.sh.
 set -eu
@@ -59,8 +101,36 @@ MODULES=${SLOT_HEALTH_MODULES:-/lib/modules}
 BOOT_CHECK=${SLOT_HEALTH_BOOT_CHECK:-/usr/local/sbin/robot-boot-check}
 # On the data partition, so it survives the slot it describes being rewritten.
 RECORD=${SLOT_HEALTH_RECORD:-/var/lib/robot/slot-health/radios}
+CMDLINE=${SLOT_HEALTH_CMDLINE:-/proc/cmdline}
+DATA=${SLOT_HEALTH_DATA:-/var/lib/robot}
+MOUNTS=${SLOT_HEALTH_MOUNTS:-/proc/mounts}
+TAINTED=${SLOT_HEALTH_TAINTED:-/proc/sys/kernel/tainted}
+DEV=${SLOT_HEALTH_DEV:-/dev}
+OSUPDATE=${SLOT_HEALTH_OSUPDATE:-/usr/bin/microduck-osupdate}
+KEYRING=${SLOT_HEALTH_KEYRING:-/usr/lib/rauc/keyring.pem}
+CA_BUNDLE=${SLOT_HEALTH_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}
+# dbus.service is also dbus-broker's alias, so this holds whichever the image runs.
+UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service systemd-timesyncd.service"
 
 uptime_secs() { cut -d. -f1 "$UPTIME"; }
+
+# Is the booted slot the one being tried? It is first in BOOT_ORDER, the other slot
+# is still listed after it, and that slot has attempts left -- so running out of
+# ours makes U-Boot boot it, not reset both counters onto us again. Anything this
+# cannot read says no: a reboot nobody can explain is worse than an unmarked slot.
+# Sets trial_slot, other_slot and order for the message.
+on_trial() {
+	trial_slot=$(tr ' ' '\n' < "$CMDLINE" | sed -n 's/^rauc\.slot=//p' | head -n 1)
+	case $trial_slot in A) other_slot=B ;; B) other_slot=A ;; *) return 1 ;; esac
+	order=$(fw_printenv -n BOOT_ORDER 2>/dev/null) || return 1
+	# shellcheck disable=SC2086 # split on purpose: the first bootname
+	set -- $order
+	[ "${1:-}" = "$trial_slot" ] || return 1
+	case " $order " in *" $other_slot "*) ;; *) return 1 ;; esac
+	left=$(fw_printenv -n "BOOT_${other_slot}_LEFT" 2>/dev/null) || return 1
+	# Any spelling of zero: U-Boot writes "0x0", RAUC "0" (as microduck-slot-trial).
+	! printf '%s' "$left" | grep -Eqx '(0x)?0+'
+}
 
 bad=""
 if [ ! -x "$BOOT_CHECK" ]; then
@@ -75,13 +145,90 @@ fi
 kernel=$(uname -r)
 [ -d "$MODULES/$kernel" ] || bad="$bad kernel($kernel has no $MODULES/$kernel: not the slot's own kernel)"
 
-# The radios the kernel has brought up: a wifi interface once the driver has loaded its
-# firmware, an HCI device once Bluetooth is attached. Whether they are associated or
-# powered is the network's business, not the OS's.
+# 6. The kernel's D taint (bit 7): an oops since boot. Unreadable reads as clean.
+# Judged against the record, below.
+tainted=$(cat "$TAINTED" 2>/dev/null || true)
+case $tainted in '' | *[!0-9]*) tainted=0 ;; esac
+oopsed=""
+[ $((tainted / 128 % 2)) = 0 ] || oopsed=oopsed
+
+# 5. The data partition: the last mount on $DATA wins, as it does for the kernel.
+data_opts=$(awk -v p="$DATA" '$2 == p { o = $4 } END { print o }' "$MOUNTS" 2>/dev/null || true)
+case ",$data_opts," in
+,,) bad="$bad data($DATA is not mounted: the data partition is missing)" ;;
+*,ro,*) bad="$bad data($DATA is mounted read-only)" ;;
+*)
+	probe=$DATA/slot-health/.probe
+	{ mkdir -p "$DATA/slot-health" && : > "$probe" && rm -f "$probe"; } 2>/dev/null ||
+		bad="$bad data(cannot write to $DATA)"
+	;;
+esac
+
+# 7. The services a robot is reached and debugged through.
+for unit in $UNITS; do
+	systemctl is-active --quiet "$unit" || bad="$bad $unit(not active)"
+done
+
+# 8. The next OS update, offline.
+if [ ! -x "$OSUPDATE" ]; then
+	bad="$bad osupdate(no $OSUPDATE: this OS could not be updated)"
+else
+	os_status=$("$OSUPDATE" status 2>/dev/null) || os_status=""
+	case $os_status in
+	*'"machine":"'[a-z0-9]*) ;;
+	*) bad="$bad osupdate($OSUPDATE status failed or named no machine)" ;;
+	esac
+fi
+grep -q 'BEGIN CERTIFICATE' "$KEYRING" 2>/dev/null ||
+	bad="$bad keyring(no certificate in $KEYRING: every bundle would be refused)"
+# bootcmd, not BOOT_ORDER: it is in every environment, so this asks only whether the
+# environment can be read.
+fw_printenv -n bootcmd >/dev/null 2>&1 ||
+	bad="$bad uboot-env(fw_printenv cannot read the U-Boot environment: apply and switch could not change slots)"
+[ -s "$CA_BUNDLE" ] || bad="$bad ca-bundle(no $CA_BUNDLE: os check and apply could not use HTTPS)"
+
+# Reported, never failed (see the header).
+for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcmC*"; do
+	name=${spec%%:*}
+	found=no
+	for dev in ${spec#*:}; do [ -e "$dev" ] && { found=yes; break; }; done
+	[ "$found" = yes ] ||
+		echo "warning: no $name (${spec#*:}): unplugged, or this board has none; reported, not failing the slot"
+done
+
+# The radios that work: a wifi interface NetworkManager can use, and a Bluetooth
+# adapter BlueZ has powered. Present is not enough -- a wlan0 whose firmware crashed
+# is "unavailable" to NetworkManager, and an hci0 that is not powered cannot
+# advertise, so btd is invisible. Both are asked offline: whether the wifi is
+# associated, or a phone is near, is the room's business, not the OS's.
+# not_working names what is present and not working, for the messages below.
+#
+# NetworkManager's device states: 10 unmanaged and 20 unavailable cannot be used;
+# 30 disconnected and everything above it can.
+wifi_state() {
+	path=$(busctl --system call org.freedesktop.NetworkManager /org/freedesktop/NetworkManager \
+		org.freedesktop.NetworkManager GetDeviceByIpIface s "$1" 2>/dev/null | cut -d'"' -f2)
+	[ -n "$path" ] || { echo none; return 0; }
+	state=$(busctl --system get-property org.freedesktop.NetworkManager "$path" \
+		org.freedesktop.NetworkManager.Device State 2>/dev/null | cut -d' ' -f2)
+	case $state in '' | *[!0-9]*) echo none ;; *) echo "$state" ;; esac
+}
+bt_powered() {
+	[ "$(busctl --system get-property org.bluez "/org/bluez/$1" org.bluez.Adapter1 Powered 2>/dev/null)" = "b true" ]
+}
 scan_radios() {
-	radios=""
-	for dev in "$SYS"/class/net/wlan*; do [ -e "$dev" ] && { radios="wifi"; break; }; done
-	for dev in "$SYS"/class/bluetooth/hci*; do [ -e "$dev" ] && { radios="${radios:+$radios }bluetooth"; break; }; done
+	radios=""; not_working=""
+	for dev in "$SYS"/class/net/wlan*; do
+		[ -e "$dev" ] || continue
+		state=$(wifi_state "${dev##*/}")
+		if [ "$state" != none ] && [ "$state" -ge 30 ]; then radios="wifi"; break; fi
+		not_working="$not_working ${dev##*/}(NetworkManager state $state)"
+	done
+	for dev in "$SYS"/class/bluetooth/hci*; do
+		[ -e "$dev" ] || continue
+		if bt_powered "${dev##*/}"; then radios="${radios:+$radios }bluetooth"; break; fi
+		not_working="$not_working ${dev##*/}(not powered)"
+	done
 	return 0
 }
 
@@ -93,14 +240,16 @@ booted=$(rauc status --detailed --output-format=json 2>/dev/null |
 slot="$(printf '%s' "$booted" | grep -o '"bootname":"[^"]*"' | head -n 1 | cut -d'"' -f4)"
 os="$slot@$(printf '%s' "$booted" | grep -o '"installed":{"timestamp":"[^"]*"' | head -n 1 | cut -d'"' -f6)"
 
-# Lines are "<os> <radios>": this OS's own if it passed before, else the latest. Only a
-# new OS is held to them; the same OS is compared but not failed, below.
+# Lines are "<os> <radios> [oopsed]": this OS's own if it passed before, else the
+# latest. Only a new OS is held to them; the same OS is compared but not failed, below.
 was=""; was_os=""; held=""
 if [ -n "$slot" ] && [ -s "$RECORD" ]; then
 	was=$(grep "^$os " "$RECORD" || tail -n 1 "$RECORD")
 	was_os=${was%% *}
-	[ "$os" = "$was_os" ] || held=${was#* }
 fi
+# The radios on a record line: its words after the OS, but `oopsed`.
+radios_of() { for w in ${1#* }; do [ "$w" = oopsed ] || printf '%s ' "$w"; done; }
+[ -z "$was" ] || [ "$os" = "$was_os" ] || held=$(radios_of "$was")
 
 # missing: the radios this OS is held to that are not up, or nothing.
 missing() {
@@ -114,31 +263,56 @@ while [ -n "$(missing)" ] && [ "$(uptime_secs)" -lt "$RADIO_DEADLINE" ]; do
 	scan_radios
 done
 
-# Without a slot name every boot would look like a new OS, so compare nothing.
+# 4. Without a slot name RAUC cannot install the next update -- and every boot would
+# look like a new OS, so radios are not compared either.
 if [ -z "$slot" ]; then
-	echo "warning: rauc status named no booted slot, so radios are neither compared nor recorded"
+	bad="$bad rauc(rauc status named no booted slot, so this OS could not install the next update)"
 elif [ -n "$was" ]; then
-	for radio in ${was#* }; do
+	for radio in $(radios_of "$was"); do
 		case " $radios " in *" $radio "*) continue ;; esac
 		if [ "$os" != "$was_os" ]; then
-			bad="$bad $radio(present under $was_os, the latest OS that passed, and missing under this one)"
+			bad="$bad $radio(working under $was_os, the latest OS that passed, and not under this one${not_working:+;$not_working})"
 		else
-			echo "warning: $radio was present on an earlier boot of this same OS and is missing now;" \
+			echo "warning: $radio worked on an earlier boot of this same OS and does not now${not_working:+ ($not_working )};" \
 				"that is the hardware or its surroundings, not an update, so it does not fail the slot"
 		fi
 	done
 fi
 
+# 6. An oops fails only a new OS that follows one that booted clean.
+if [ -n "$oopsed" ]; then
+	case " ${was#* } " in
+	*" oopsed "*) was_clean=no ;;
+	*) was_clean=yes ;;
+	esac
+	if [ -n "$was" ] && [ "$os" != "$was_os" ] && [ "$was_clean" = yes ]; then
+		bad="$bad kernel(oopsed during this boot, tainted=$tainted; $was_os, the latest OS that passed, did not)"
+	else
+		echo "warning: the kernel oopsed during this boot (tainted=$tainted), but the latest OS that passed" \
+			"did too, or this is that OS, or there is none; reported, not failing the slot"
+	fi
+fi
+
 if [ -n "$bad" ]; then
 	echo "slot not healthy, not marking it good:$bad"
+	if on_trial; then
+		# --no-block: this unit is part of the boot transaction the reboot replaces.
+		echo "slot $trial_slot is on trial (BOOT_ORDER '$order') and $other_slot has attempts left:" \
+			"rebooting, so U-Boot falls back once this slot's attempts are spent"
+		systemctl reboot --no-block || echo "warning: could not ask systemd for a reboot"
+	fi
 	exit 1
 fi
 
 # Only a boot that passed sets what the next OS is held to. This slot's line replaces
 # its old one and goes last; only the OS each slot holds now can boot again. A failure
 # to write must not fail the slot: it only loses the comparison for the next update.
+words=$radios
+[ -z "$oopsed" ] || words="${words:+$words }oopsed"
 [ -z "$slot" ] || { mkdir -p "$(dirname "$RECORD")" &&
-	{ grep -v "^$slot@" "$RECORD"; printf '%s %s\n' "$os" "$radios"; } > "$RECORD.new" &&
+	{ grep -v "^$slot@" "$RECORD"; printf '%s %s\n' "$os" "$words"; } > "$RECORD.new" &&
 	mv "$RECORD.new" "$RECORD"; } 2>/dev/null ||
 	echo "warning: could not record this boot's radios in $RECORD"
-echo "every daemon came up, the kernel is the slot's own, radios: ${radios:-none}; the slot can be marked good"
+echo "every daemon came up, the kernel is the slot's own and no oops is new, RAUC and the data" \
+	"partition work, the next OS update can run, $UNITS are active, radios: ${radios:-none};" \
+	"the slot can be marked good"
