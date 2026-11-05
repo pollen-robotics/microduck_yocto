@@ -20,12 +20,10 @@ WKS = Path(__file__).resolve().parent.parent / "meta-microduck-bsp/files/wic/mic
 # name -> measured bytes of the artifact that must fit (2026-09-17).
 #
 # Keyed by the wks --part-name, so this list moves whenever a partition is
-# renamed. `boot` rather than `boot_a` because vendor U-Boot finds the kernel by
-# that exact GPT name -- see the comment on the part line in the wks.
+# renamed. The kernel is not here: it lives in each rootfs slot's /boot.
 ARTIFACTS = {
     "idblock": 313344,     # idblock.img
     "uboot": 4 << 20,      # uboot.img, exactly 4 MiB
-    "boot": 17004544,      # boot.img
 }
 
 UNITS = {"s": 512, "S": 512, "K": 1024, "k": 1024, "M": 1 << 20, "G": 1 << 30}

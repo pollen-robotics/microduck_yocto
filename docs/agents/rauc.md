@@ -24,27 +24,48 @@ before shipping. U-Boot itself is not in a slot.
 `--offset` and `--fixed-size`, so wic fails rather than shifting anything. A
 bundle built against one layout writing into another is the failure this prevents.
 
-**The kernel partition is named `boot`, not `boot_a`, and you cannot rename it.**
-Vendor U-Boot finds the kernel by GPT partition name — its environment carries
-`name=boot,size=32M,bootable` and `bootcmd=boot_android ...;boot_fit;bootrkp;run
-distro_bootcmd;`. Called `boot_a`, the card flashes perfectly, RKNS is at sector
-64, a valid `ANDROID!` image sits in the slot, and the board never loads a kernel:
-no wifi, no BLE, looks dead. `boot_b` is reserved at its offset for stage 2, which
-is where renaming the pair belongs — beside the `boot.scr` that can choose.
+**There is no `boot` partition any more (2026-11-05), and none may come back
+under that name by accident.** Vendor U-Boot's own chain finds a kernel by the
+exact GPT name `boot` — its environment carries `name=boot,size=32M,bootable` and
+`bootcmd=boot_android ...;boot_fit;bootrkp;run distro_bootcmd;`. Before the kernel
+moved into the slots, renaming it `boot_a` gave a card that flashed perfectly and
+never loaded a kernel: no wifi, no BLE, looks dead. Our bootcmd no longer runs
+that chain at all (below), so the partition, its fallback kernel and the reserved
+`boot_b` went: a fallback kernel that
+does not match the slot's modules is worse than no boot. 16..80 MiB is left
+unallocated so no later offset moved.
+
+**Unverified on hardware until the first card of this layout boots: what U-Boot
+itself runs on.** `board_init()` calls `init_kernel_dtb()`
+(`arch/arm/mach-rockchip/kernel_dtb.c:297`), which reads the kernel DTB out of
+the `boot` partition's resource image and makes it U-Boot's own live tree. With
+no such partition it prints `Failed to get kernel dtb` and U-Boot carries on with
+its built-in `rk3568-evb` tree. The kernel is unaffected (the script loads the
+slot's DTB), but U-Boot's own MMC and regulator setup then comes from the EVB
+tree. If a board misbehaves before the kernel, `CONFIG_EMBED_KERNEL_DTB` with the
+board's DTB is the fix to try.
 
 ## The kernel is in the slot (2026-10-16)
 
 Each rootfs carries `/boot/Image` and `/boot/microduck.dtb` (a symlink to the
 machine's DTB, so one bootcmd serves both boards). After picking the slot,
-U-Boot's script `ext4load`s both from that slot's partition and `booti`s them;
-only when they are missing does it fall through to Rockchip's chain and the
-`boot` partition, which stays as that fallback. So a bundle carries the kernel,
-DTB and modules together, and a kernel or toolchain change is an ordinary update
-instead of a reflash. Traps:
+U-Boot's script `ext4load`s both from that slot's partition and `booti`s them.
+If they will not load or boot, the script zeroes that slot's counter, saves and
+resets, so the next boot takes the next slot in `BOOT_ORDER`. With a one-slot
+order there is nothing to reset onto, so it stops at the U-Boot prompt rather than
+loop every few seconds rewriting the environment; a power cycle tries again.
+Rockchip's chain is
+never run. So a bundle carries the kernel, DTB and modules together, and a kernel
+or toolchain change is an ordinary update instead of a reflash. Traps:
 
 - **By number, not label.** `ext4load` takes `mmc <dev>:<part>`, and this U-Boot
-  has no `part number`: rootfs_a is 6 and rootfs_b 7. `check-wks-layout.py`
-  compares those with the boot script, so a reordered wks fails in 0.1 s.
+  has no `part number`: rootfs_a is 4 and rootfs_b 5 (6 and 7 before the `boot`
+  partitions went). `check-wks-layout.py` compares those with the boot script, so
+  a reordered wks fails in 0.1 s.
+- **Bundles still install across the two layouts.** RAUC addresses slots by label
+  (`/dev/disk/by-partlabel/rootfs_*`) and a bundle carries no U-Boot, so an old card
+  keeps its old U-Boot (partitions 6/7, `boot` fallback) and a new card its new
+  one. Only a reflash moves a board to this layout.
 - **The bundle hook checks the bootcmd U-Boot will run**, from `fw_printenv`, not
   the U-Boot binary: a saved environment keeps its bootcmd, and a card that kept
   an old environment would boot the `boot` partition's kernel against the slot's
@@ -379,7 +400,10 @@ Each of those reboots spends an attempt, so a slot on trial that never reaches
 
 ## What is not done
 
-- `boot_b` is reserved and empty; the kernel's A/B is the slots' `/boot` (above).
+- No bootloader update: a bundle never writes the idblock or U-Boot, so both stay
+  as flashed. The 16..80 MiB left free when `boot`/`boot_b` went is room for a
+  redundant bootloader region later, if the RK3566 ROM's backup locations are
+  confirmed (RAUC's `boot-raw-fallback`).
 - **A fresh card seeds `BOOT_ORDER="A"`**, not `"A B"`, so B is only booted when
   a RAUC install or a `switch` puts it first. It started (2026-10-06) as a
   temporary pin after bring-up kept landing on B; it is now the design (next

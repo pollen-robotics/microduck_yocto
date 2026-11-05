@@ -23,24 +23,27 @@ and silently moved the board to B. Put "A B" back when that is fixed --
 pollen-robotics/microduck_yocto#24.
 
 Then boot the kernel and DTB in the chosen slot's own /boot (ext4load from
-partition 6 or 7, booti), so a RAUC bundle carries its kernel; only a slot
-without them falls through to RKIMG_BOOTCOMMAND and the `boot` partition.
+partition 4 or 5, booti), so a RAUC bundle carries its kernel. Rockchip's
+chain is no longer run: a slot whose kernel does not load or boot has its
+counter zeroed and the board resets onto the next slot in BOOT_ORDER. There
+is no `boot` partition kernel to fall back to, since one that does not match
+the slot's modules is worse than no boot.
+With BOOT_ORDER naming that slot alone there is nothing to reset onto, so it
+stops rather than loop, rewriting the environment, until the power is pulled.
 
 Upstream-Status: Inappropriate [microduck RAUC integration]
 ---
- include/configs/evb_rk3568.h | 67 ++++++++++++++++++++++++++++++++++++-
- 1 file changed, 66 insertions(+), 1 deletion(-)
+ include/configs/evb_rk3568.h | 82 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 81 insertions(+), 1 deletion(-)
 
-diff --git a/include/configs/evb_rk3568.h b/include/configs/evb_rk3568.h
-index f7318c3..d20cdca 100644
 --- a/include/configs/evb_rk3568.h
 +++ b/include/configs/evb_rk3568.h
-@@ -19,8 +19,73 @@
+@@ -19,8 +19,88 @@
  
  #define CONFIG_SYS_MMC_ENV_DEV		0
  
 +/*
-+ * microduck: RAUC A/B slot selection, run before Rockchip's own boot chain.
++ * microduck: RAUC A/B slot selection, in place of Rockchip's own boot chain.
 + * Picks the first bootname in BOOT_ORDER whose BOOT_<name>_LEFT is not zero,
 + * decrements and saves it, and points the kernel at that slot. Adapted from RAUC's
 + * contrib/uboot.sh; docs/agents/rauc.md has the full reasoning. Three traps:
@@ -90,23 +93,38 @@ index f7318c3..d20cdca 100644
 +/*
 + * microduck: boot the kernel and DTB that live in the chosen slot's rootfs, so a
 + * RAUC bundle carries its own kernel and an update can change it. rootfs_a is GPT
-+ * partition 6 and rootfs_b 7 (scripts/check-wks-layout.py checks it; this tree has
++ * partition 4 and rootfs_b 5 (scripts/check-wks-layout.py checks it; this tree has
 + * no `part number`). /boot/microduck.dtb is the machine's DTB under one name, so
-+ * one U-Boot serves both boards. A slot without them falls through to Rockchip's
-+ * chain and the kernel in the `boot` partition, as before.
++ * one U-Boot serves both boards.
++ *
++ * There is no other kernel to fall back to: a slot whose kernel will not load or
++ * boot spends its remaining attempts at once and the board resets, so the next
++ * boot takes the next slot in BOOT_ORDER -- the same path as a slot that never
++ * reaches rauc-mark-good. Rockchip's own chain (RKIMG_BOOTCOMMAND) is not run: it
++ * would boot a `boot` partition kernel that does not match the slot's modules.
++ *
++ * Unless BOOT_ORDER names this slot alone: there is nothing to reset onto, and
++ * resetting anyway would loop every few seconds, writing the environment each
++ * time, until someone pulls the power. So it stops here instead; a power cycle
++ * tries again, spending one attempt as any boot does.
 + */
 +#define MICRODUCK_ROOTFS_BOOT \
-+	"setenv rauc_partnum 6; " \
-+	"if test \"x${rauc_slot}\" = \"xB\"; then setenv rauc_partnum 7; fi; " \
++	"setenv rauc_partnum 4; " \
++	"if test \"x${rauc_slot}\" = \"xB\"; then setenv rauc_partnum 5; fi; " \
 +	"if ext4load ${devtype} ${devnum}:${rauc_partnum} ${kernel_addr_r} /boot/Image && " \
 +	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${fdt_addr_r} /boot/microduck.dtb; then " \
 +		"echo \"RAUC: kernel from ${rauc_part}\"; booti ${kernel_addr_r} - ${fdt_addr_r}; " \
 +	"fi; " \
-+	"echo \"RAUC: no kernel in ${rauc_part}, falling back to the boot partition\"; "
++	"if test \"x${BOOT_ORDER}\" = \"x${rauc_slot}\"; then " \
++		"echo \"RAUC: no bootable kernel in ${rauc_part} and no other slot to boot; stopping\"; " \
++	"else " \
++		"echo \"RAUC: no bootable kernel in ${rauc_part}, giving up on slot ${rauc_slot}\"; " \
++		"setenv BOOT_${rauc_slot}_LEFT 0; saveenv; reset; " \
++	"fi; "
 +
  #undef CONFIG_BOOTCOMMAND
 -#define CONFIG_BOOTCOMMAND RKIMG_BOOTCOMMAND
-+#define CONFIG_BOOTCOMMAND MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT RKIMG_BOOTCOMMAND
++#define CONFIG_BOOTCOMMAND MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT
  
  #ifdef CONFIG_USB_FUNCTION_DFU
  #define CONFIG_SET_DFU_ALT_INFO
