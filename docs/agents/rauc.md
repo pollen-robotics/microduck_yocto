@@ -328,6 +328,12 @@ would then carry 2 GiB.
 install` or a `switch` (`rauc status mark-active`) to that slot's first good boot.
 After that the robot stays on it, whatever happens to its boots.
 
+**A slot on trial that fails `microduck-slot-health` reboots at once** (2026-11-05), so its three attempts go in minutes rather than
+waiting for three power cycles. Only that slot -- first in `BOOT_ORDER`, the other
+slot listed after it with attempts left. A slot that already passed, or the
+fallback slot after a failed trial, fails without rebooting, or it would loop on
+itself or bounce between two bad OSes.
+
 Why, from a beta board on 2026-11-04. U-Boot's script spends one of
 `BOOT_<slot>_LEFT`'s three attempts on every boot, and only `rauc-mark-good` gives
 them back — ~93 s in on that board (a 90 s wait for `/dev/ttyFIQ0`), ~25 s on a

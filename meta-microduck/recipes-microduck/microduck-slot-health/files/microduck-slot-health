@@ -5,11 +5,18 @@
 # rauc-mark-good.service in turn requires boot-complete.target, so a non-zero exit
 # here means the slot is never marked good. The daemon's robot-boot-check gets the
 # same verdict on the daemons, because this asks it; its robot-rescue reboots only
-# when a non-golden daemon release is at fault. Otherwise nothing reboots, the slot
-# stays unmarked, and every later reboot counts against it. U-Boot falls back on its
-# own only while the slot is on trial -- installed or switched to, and not yet good
-# once; after that BOOT_ORDER names it alone (microduck-slot-trial), so a failure here
-# on an OS that already passed costs attempts, never the slot.
+# when a non-golden daemon release is at fault. U-Boot falls back on its own only
+# while the slot is on trial -- installed or switched to, and not yet good once;
+# after that BOOT_ORDER names it alone (microduck-slot-trial), so a failure here on
+# an OS that already passed costs attempts, never the slot.
+#
+# A slot on trial that fails is rebooted at once, so
+# its three attempts are spent in minutes and U-Boot boots the previous OS, instead
+# of a broken update sitting there until someone power-cycles the robot three
+# times. Only that slot: one that already passed would reboot forever on a
+# one-slot order, and the fallback slot after a failed trial (or a trial whose
+# other slot has no attempts left) would bounce between two bad OSes. Every other
+# failure leaves the slot unmarked and running, as before.
 #
 # Three questions, the first the daemon's own and the other two about the OS alone,
 # which no daemon rollback could fix:
@@ -59,8 +66,27 @@ MODULES=${SLOT_HEALTH_MODULES:-/lib/modules}
 BOOT_CHECK=${SLOT_HEALTH_BOOT_CHECK:-/usr/local/sbin/robot-boot-check}
 # On the data partition, so it survives the slot it describes being rewritten.
 RECORD=${SLOT_HEALTH_RECORD:-/var/lib/robot/slot-health/radios}
+CMDLINE=${SLOT_HEALTH_CMDLINE:-/proc/cmdline}
 
 uptime_secs() { cut -d. -f1 "$UPTIME"; }
+
+# Is the booted slot the one being tried? It is first in BOOT_ORDER, the other slot
+# is still listed after it, and that slot has attempts left -- so running out of
+# ours makes U-Boot boot it, not reset both counters onto us again. Anything this
+# cannot read says no: a reboot nobody can explain is worse than an unmarked slot.
+# Sets trial_slot, other_slot and order for the message.
+on_trial() {
+	trial_slot=$(tr ' ' '\n' < "$CMDLINE" | sed -n 's/^rauc\.slot=//p' | head -n 1)
+	case $trial_slot in A) other_slot=B ;; B) other_slot=A ;; *) return 1 ;; esac
+	order=$(fw_printenv -n BOOT_ORDER 2>/dev/null) || return 1
+	# shellcheck disable=SC2086 # split on purpose: the first bootname
+	set -- $order
+	[ "${1:-}" = "$trial_slot" ] || return 1
+	case " $order " in *" $other_slot "*) ;; *) return 1 ;; esac
+	left=$(fw_printenv -n "BOOT_${other_slot}_LEFT" 2>/dev/null) || return 1
+	# Any spelling of zero: U-Boot writes "0x0", RAUC "0" (as microduck-slot-trial).
+	! printf '%s' "$left" | grep -Eqx '(0x)?0+'
+}
 
 bad=""
 if [ ! -x "$BOOT_CHECK" ]; then
@@ -131,6 +157,12 @@ fi
 
 if [ -n "$bad" ]; then
 	echo "slot not healthy, not marking it good:$bad"
+	if on_trial; then
+		# --no-block: this unit is part of the boot transaction the reboot replaces.
+		echo "slot $trial_slot is on trial (BOOT_ORDER '$order') and $other_slot has attempts left:" \
+			"rebooting, so U-Boot falls back once this slot's attempts are spent"
+		systemctl reboot --no-block || echo "warning: could not ask systemd for a reboot"
+	fi
 	exit 1
 fi
 

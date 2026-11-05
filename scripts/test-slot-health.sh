@@ -49,6 +49,18 @@ cat > "$work/bin/rauc" <<'EOF'
 #!/bin/sh
 cat "$STUB/rauc" 2>/dev/null
 EOF
+# The U-Boot environment, one file per variable under $STUB/env; a missing file is
+# a variable fw_printenv does not have, which it reports by failing.
+cat > "$work/bin/fw_printenv" <<'EOF'
+#!/bin/sh
+[ "$1" = -n ] || { echo "fw_printenv called as: $*"; exit 99; }
+cat "$STUB/env/$2" 2>/dev/null
+EOF
+# Records what it was asked, so a case can tell whether the board would reboot.
+cat > "$work/bin/systemctl" <<'EOF'
+#!/bin/sh
+echo "$*" >> "$STUB/systemctl"
+EOF
 chmod +x "$work/bin/"*
 
 pass=0; fail=0
@@ -58,7 +70,7 @@ run() {
 	name=$1; want=$2
 	out=$(PATH="$work/bin:$PATH" STUB=$STUB SYSROOT=$SYSROOT SLOT_HEALTH_UPTIME=$STUB/uptime \
 		SLOT_HEALTH_SYS=$SYSROOT SLOT_HEALTH_MODULES=$MODS SLOT_HEALTH_RECORD=$RECORD \
-		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK \
+		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -80,6 +92,23 @@ fresh() {
 	echo 6.1.99 > "$STUB/kernel"
 	slot A ""
 	radios wifi bluetooth
+	uboot A A 3 3
+}
+# booted slot (rauc.slot= on the command line), BOOT_ORDER, BOOT_A_LEFT, BOOT_B_LEFT.
+# A flashed card: "A A 3 3". Just after an install into B: "B 'B A' 3 3".
+uboot() {
+	echo "root=PARTLABEL=rootfs_x rauc.slot=$1 rootwait" > "$STUB/cmdline"
+	rm -rf "$STUB/env"; mkdir -p "$STUB/env"
+	echo "$2" > "$STUB/env/BOOT_ORDER"
+	echo "$3" > "$STUB/env/BOOT_A_LEFT"
+	echo "$4" > "$STUB/env/BOOT_B_LEFT"
+	rm -f "$STUB/systemctl"
+}
+# expect_reboot yes|no NAME
+expect_reboot() {
+	if [ -f "$STUB/systemctl" ]; then got=yes; else got=no; fi
+	if [ "$got" = "$1" ]; then pass=$((pass + 1)); echo "ok   $2"
+	else fail=$((fail + 1)); echo "FAIL $2 (reboot asked: $got)"; echo "$last" | sed 's/^/     | /'; fi
 }
 # bootname, RAUC install timestamp ("" for a flashed slot). Shaped like rauc status
 # on the board: the other slot first, with a timestamp of its own, so the script has
@@ -215,6 +244,62 @@ radios bluetooth
 echo 20.00 > "$STUB/uptime"
 run "the same OS missing wifi early passes without waiting" 0
 case $(cut -d. -f1 "$STUB/uptime") in 20) ;; *) fail=$((fail + 1)); echo "FAIL a radio this OS is not held to is not waited for";; esac
+
+# Rebooting a failed slot: only the one on trial, and only towards a slot that can
+# still boot.
+fresh flashed-fails
+echo 3 > "$STUB/bootcheck"
+run "a flashed card whose daemons fail fails the slot" 1
+expect_reboot no "  ... and is not rebooted: BOOT_ORDER names it alone"
+
+fresh trial-fails
+slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 0x2
+echo 3 > "$STUB/bootcheck"
+run "an update on trial whose daemons fail fails the slot" 1
+expect_reboot yes "  ... and is rebooted, to spend its attempts"
+grep -qx 'reboot --no-block' "$STUB/systemctl" ||
+	{ fail=$((fail + 1)); echo "FAIL the reboot does not block the boot transaction"; }
+
+fresh trial-loses-wifi
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; radios bluetooth; uboot B "B A" 3 3
+run "an update on trial that lost wifi fails" 1
+expect_reboot yes "  ... and is rebooted too"
+
+fresh trial-passes
+slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 0x2
+run "an update on trial that is healthy passes" 0
+expect_reboot no "  ... and is not rebooted"
+
+fresh fallback-fails
+slot A ""; uboot A "B A" 3 0x0
+echo 3 > "$STUB/bootcheck"
+run "the fallback slot after a failed trial, failing too, fails" 1
+expect_reboot no "  ... and is not rebooted: it is not first in BOOT_ORDER"
+
+fresh trial-other-spent
+slot B "2026-10-28T10:00:00Z"; uboot B "B A" 0 0x2
+echo 3 > "$STUB/bootcheck"
+run "a trial whose other slot has no attempts left fails" 1
+expect_reboot no "  ... and is not rebooted: U-Boot would reset both and boot it again"
+
+fresh passed-then-fails
+slot B "2026-10-28T10:00:00Z"; uboot B B 3 0x2
+echo 3 > "$STUB/bootcheck"
+run "an OS that already passed (alone in BOOT_ORDER) failing fails" 1
+expect_reboot no "  ... and is not rebooted: it would loop on itself"
+
+fresh no-env
+slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3; rm "$STUB/env/BOOT_ORDER"
+echo 3 > "$STUB/bootcheck"
+run "an unreadable U-Boot environment" 1
+expect_reboot no "  ... means no reboot"
+
+fresh no-cmdline-slot
+slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3; echo "root=/dev/mmcblk0p4" > "$STUB/cmdline"
+echo 3 > "$STUB/bootcheck"
+run "no rauc.slot= on the command line" 1
+expect_reboot no "  ... means no reboot"
 
 fresh unwritable
 mkdir -p "$(dirname "$RECORD")"; chmod 0555 "$(dirname "$RECORD")"
