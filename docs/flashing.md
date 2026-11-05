@@ -33,6 +33,7 @@ Each run shows the build it picked and asks before writing.
 | Flash without the confirmation question | `FLASH_EMMC_YES=1 scripts/flash-emmc.sh release microduck-beta` |
 | Rewrite only the bootloader of a board stuck in maskrom | `scripts/flash-emmc.sh recover dev microduck-beta` |
 | Back up a whole eMMC (about an hour) | `scripts/flash-emmc.sh dump backup.img microduck-beta` |
+| Free the disk space the downloads take (asks first) | `scripts/flash-emmc.sh clean` |
 | All options | `scripts/flash-emmc.sh --help` |
 
 `dev` and `recover` read the build cache bucket, so they need the Hugging Face

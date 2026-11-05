@@ -5,6 +5,7 @@
 #   scripts/flash-emmc.sh latest [WHAT] [MACHINE]    print what WHAT resolves to
 #   scripts/flash-emmc.sh recover [WHAT] [MACHINE]   rewrite only the idblock and U-Boot
 #   scripts/flash-emmc.sh dump FILE [MACHINE]        read the whole eMMC into FILE
+#   scripts/flash-emmc.sh clean                      delete the downloads, after asking
 #
 # WHAT is one of:
 #   release (default)     the latest GitHub release: the shipping image
@@ -42,7 +43,7 @@ FLASH_DIR=${FLASH_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/microduck-flash}
 die() { echo "error: $*" >&2; exit 1; }
 say() { echo "==> $*" >&2; }
 
-usage() { sed -n '2,35s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,36s/^# \{0,1\}//p' "$0"; }
 
 # rkdeveloptool needs root on Linux (no udev rule), not on macOS.
 rkdt() {
@@ -169,7 +170,7 @@ check_ddr() {
 # confirm ACTION WHAT: shows what is about to be written and asks, before any
 # large download. FLASH_EMMC_YES=1 skips the question.
 confirm() {
-	local source built answer
+	local source built
 	if [ "$KIND" = release ]; then
 		source="release $SRC, https://github.com/$REPO/releases/tag/$SRC"
 	else
@@ -184,12 +185,19 @@ confirm() {
 		[ -z "$built" ] || echo "    built:  $built"
 		echo
 	} >&2
+	ask "Go ahead?" "nothing written"
+}
+
+# ask QUESTION ABORTED: dies with "aborted, ABORTED" unless the answer is yes.
+# FLASH_EMMC_YES=1 answers yes.
+ask() {
+	local answer
 	[ -z "${FLASH_EMMC_YES:-}" ] || return 0
 	[ -t 0 ] || die "stdin is not a terminal: set FLASH_EMMC_YES=1 to go ahead without asking"
-	read -r -p "Go ahead? [y/N] " answer
+	read -r -p "$1 [y/N] " answer
 	case $answer in
 	[yY] | [yY][eE][sS]) ;;
-	*) die "aborted, nothing written" ;;
+	*) die "aborted, $2" ;;
 	esac
 }
 
@@ -305,10 +313,36 @@ dump() {
 	say "done. Compress with: zstd -T0 --rm $file"
 }
 
+# Deletes the downloads, after listing them with their sizes and asking. Only
+# the folders this script makes are touched (a release tag, a 24-hex bucket
+# folder), so a FLASH_DIR pointed at a shared place loses nothing else.
+clean() {
+	local d name
+	local -a dirs=()
+	for d in "$FLASH_DIR"/*/; do
+		name=$(basename "$d")
+		case $name in
+		microduck-os-v*) ;;
+		*) [[ $name =~ ^[0-9a-f]{24}$ ]] || continue ;;
+		esac
+		dirs+=("${d%/}")
+	done
+	if [ ${#dirs[@]} -eq 0 ]; then
+		say "nothing to clean in $FLASH_DIR"
+		return
+	fi
+	du -sh "${dirs[@]}" >&2
+	ask "Delete these ${#dirs[@]} folders?" "nothing deleted"
+	rm -rf "${dirs[@]}"
+	rmdir "$FLASH_DIR" 2>/dev/null || true
+	say "deleted ${#dirs[@]} folders from $FLASH_DIR"
+}
+
 main() {
 	local cmd=flash
 	case ${1:-} in
 	-h | --help | help) usage; exit 0 ;;
+	clean) clean; return ;;
 	flash | latest | recover | dump) cmd=$1; shift ;;
 	esac
 	command -v gh >/dev/null || die "gh not found"
