@@ -71,6 +71,8 @@
 #    - `microduck-osupdate status` answers with this board's machine (it reads RAUC
 #      and local state, never the network);
 #    - the RAUC keyring holds a certificate: without one every bundle is refused;
+#    - the U-Boot environment is readable: apply and switch write BOOT_ORDER
+#      through it;
 #
 # Reported, never failed: the hardware the robot needs that may simply be unplugged
 # or absent on this board -- the motor bus, the camera, the sound card. A missing
@@ -169,6 +171,10 @@ else
 fi
 grep -q 'BEGIN CERTIFICATE' "$KEYRING" 2>/dev/null ||
 	bad="$bad keyring(no certificate in $KEYRING: every bundle would be refused)"
+# bootcmd, not BOOT_ORDER: it is in every environment, so this asks only whether the
+# environment can be read.
+fw_printenv -n bootcmd >/dev/null 2>&1 ||
+	bad="$bad uboot-env(fw_printenv cannot read the U-Boot environment: apply and switch could not change slots)"
 
 # Reported, never failed (see the header).
 for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcmC*"; do

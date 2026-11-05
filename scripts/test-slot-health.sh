@@ -141,6 +141,7 @@ uboot() {
 	echo "$2" > "$STUB/env/BOOT_ORDER"
 	echo "$3" > "$STUB/env/BOOT_A_LEFT"
 	echo "$4" > "$STUB/env/BOOT_B_LEFT"
+	echo "setenv bootargs ...; booti \${kernel_addr_r} - \${fdt_addr_r}" > "$STUB/env/bootcmd"
 	rm -f "$STUB/systemctl"
 }
 # expect_reboot yes|no NAME
@@ -432,6 +433,11 @@ expect_in "keyring(no certificate" "  ... and says why"
 fresh keyring-missing
 rm "$STUB/keyring.pem"
 run "a missing RAUC keyring fails the slot" 1
+
+fresh env-unreadable
+rm "$STUB/env/bootcmd"
+run "an unreadable U-Boot environment fails the slot" 1
+expect_in "uboot-env(" "  ... and says why"
 
 # Hardware that may be unplugged: reported, never failed.
 fresh no-devices
