@@ -37,9 +37,9 @@
 #    modules, which loads no wifi driver. The daemons wait for missing hardware by
 #    design, so question 1 passes that boot; this one does not.
 #
-# 3. Did this OS lose a radio the previous OS had? A kernel or driver regression that
-#    drops wifi or Bluetooth leaves a robot nobody can reach, and question 1 passes
-#    it too. Not "is there a radio": the beta board's has been unreliable, and a board
+# 3. Did this OS lose a radio the previous OS had working? A kernel or driver
+#    regression that drops wifi or Bluetooth leaves a robot nobody can reach, and
+#    question 1 passes it too. Working, not just present (scan_radios). Not "is there a radio": the beta board's has been unreliable, and a board
 #    with a dead chip would then fail every boot of every slot and bounce between
 #    them. Instead, each boot that passes records which radios it had and which OS it
 #    was (the slot, and when RAUC wrote it), one line per slot. A *new* OS must have
@@ -189,12 +189,30 @@ for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcm
 		echo "warning: no $name (${spec#*:}): unplugged, or this board has none; reported, not failing the slot"
 done
 
-# The radios the kernel has brought up: a wifi interface once the driver has loaded its
-# firmware, an HCI device once Bluetooth is attached. Whether they are associated or
-# powered is the network's business, not the OS's.
+# The radios that work: a wifi interface NetworkManager can use, and an HCI device
+# once Bluetooth is attached. Present is not enough for wifi -- a wlan0 whose
+# firmware crashed is "unavailable" to NetworkManager. Asked offline: whether the
+# wifi is associated is the network's business, not the OS's.
+# not_working names what is present and not working, for the messages below.
+#
+# NetworkManager's device states: 10 unmanaged and 20 unavailable cannot be used;
+# 30 disconnected and everything above it can.
+wifi_state() {
+	path=$(busctl --system call org.freedesktop.NetworkManager /org/freedesktop/NetworkManager \
+		org.freedesktop.NetworkManager GetDeviceByIpIface s "$1" 2>/dev/null | cut -d'"' -f2)
+	[ -n "$path" ] || { echo none; return 0; }
+	state=$(busctl --system get-property org.freedesktop.NetworkManager "$path" \
+		org.freedesktop.NetworkManager.Device State 2>/dev/null | cut -d' ' -f2)
+	case $state in '' | *[!0-9]*) echo none ;; *) echo "$state" ;; esac
+}
 scan_radios() {
-	radios=""
-	for dev in "$SYS"/class/net/wlan*; do [ -e "$dev" ] && { radios="wifi"; break; }; done
+	radios=""; not_working=""
+	for dev in "$SYS"/class/net/wlan*; do
+		[ -e "$dev" ] || continue
+		state=$(wifi_state "${dev##*/}")
+		if [ "$state" != none ] && [ "$state" -ge 30 ]; then radios="wifi"; break; fi
+		not_working="$not_working ${dev##*/}(NetworkManager state $state)"
+	done
 	for dev in "$SYS"/class/bluetooth/hci*; do [ -e "$dev" ] && { radios="${radios:+$radios }bluetooth"; break; }; done
 	return 0
 }
@@ -236,9 +254,9 @@ elif [ -n "$was" ]; then
 	for radio in ${was#* }; do
 		case " $radios " in *" $radio "*) continue ;; esac
 		if [ "$os" != "$was_os" ]; then
-			bad="$bad $radio(present under $was_os, the latest OS that passed, and missing under this one)"
+			bad="$bad $radio(working under $was_os, the latest OS that passed, and not under this one${not_working:+;$not_working})"
 		else
-			echo "warning: $radio was present on an earlier boot of this same OS and is missing now;" \
+			echo "warning: $radio worked on an earlier boot of this same OS and does not now${not_working:+ ($not_working )};" \
 				"that is the hardware or its surroundings, not an update, so it does not fail the slot"
 		fi
 	done

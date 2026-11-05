@@ -64,6 +64,16 @@ cat > "$work/bin/microduck-osupdate" <<'EOF'
 [ "$*" = status ] || { echo "microduck-osupdate called as: $*" >> "$STUB/forbidden"; exit 99; }
 cat "$STUB/osupdate" 2>/dev/null
 EOF
+# D-Bus, as NetworkManager answers it: wlan0's device state from $STUB/nm-state.
+# A missing file is a service that does not answer.
+cat > "$work/bin/busctl" <<'EOF'
+#!/bin/sh
+case "$*" in
+*"GetDeviceByIpIface s wlan0") [ -f "$STUB/nm-state" ] && echo 'o "/org/freedesktop/NetworkManager/Devices/3"' ;;
+*"Devices/3 org.freedesktop.NetworkManager.Device State") [ -f "$STUB/nm-state" ] && echo "u $(cat "$STUB/nm-state")" ;;
+*) echo "busctl called as: $*" >&2; exit 99 ;;
+esac
+EOF
 # Nothing may fetch anything.
 cat > "$work/bin/curl" <<'EOF'
 #!/bin/sh
@@ -122,6 +132,8 @@ fresh() {
 	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
 	echo 0 > "$STUB/tainted"
 	: > "$DEVDIR/ttyS2"; : > "$DEVDIR/video0"; : > "$DEVDIR/snd/pcmC0D0p"
+	# wifi working: NetworkManager has wlan0 disconnected (usable, no AP needed).
+	echo 30 > "$STUB/nm-state"
 	# The update path: osupdate's status as the script prints it, a keyring with a
 	# certificate, a CA bundle.
 	OSUPDATE=$work/bin/microduck-osupdate
@@ -210,7 +222,7 @@ fresh update-loses-wifi
 run "flashed A passes" 0
 slot B "2026-10-28T10:00:00Z"; radios bluetooth
 run "an update to B that lost wifi fails" 1
-case $last in *"wifi(present under A@, the latest OS that passed"*) ;; *) fail=$((fail + 1)); echo "FAIL the wifi failure says why";; esac
+case $last in *"wifi(working under A@, the latest OS that passed"*) ;; *) fail=$((fail + 1)); echo "FAIL the wifi failure says why";; esac
 [ "$(cat "$RECORD")" = 'A@ wifi bluetooth' ] ||
 	{ fail=$((fail + 1)); echo "FAIL a failed boot leaves the record alone"; }
 slot A ""; radios wifi bluetooth
@@ -401,6 +413,42 @@ slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3
 printf '/dev/root / ext4 rw 0 0\n' > "$STUB/mounts"
 run "an update on trial without its data partition fails" 1
 expect_reboot yes "  ... and is rebooted like any other failure on trial"
+
+# Radios present but not working.
+fresh wifi-unavailable
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; echo 20 > "$STUB/nm-state"
+run "an update whose wlan0 NetworkManager calls unavailable fails" 1
+expect_in "wifi(working under A@" "  ... and says it stopped working"
+expect_in "wlan0(NetworkManager state 20)" "  ... and why"
+
+fresh wifi-unmanaged
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; echo 10 > "$STUB/nm-state"
+run "an update whose wlan0 is unmanaged fails" 1
+
+fresh wifi-nm-silent
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; rm "$STUB/nm-state"
+run "an update where NetworkManager does not answer for wlan0 fails" 1
+expect_in "wlan0(NetworkManager state none)" "  ... and says so"
+
+fresh wifi-connected
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; echo 100 > "$STUB/nm-state"
+run "an update with wifi connected passes" 0
+
+fresh wifi-offline-ok
+echo 30 > "$STUB/nm-state"
+run "wifi disconnected (no network around) still counts as working" 0
+grep -qx 'A@ wifi bluetooth' "$RECORD" ||
+	{ fail=$((fail + 1)); echo "FAIL a disconnected wifi is recorded as working"; }
+
+fresh same-os-wifi-dies
+run "flashed A passes" 0
+echo 20 > "$STUB/nm-state"
+run "the same OS with wifi now unavailable passes: hardware, not an update" 0
+expect_in "warning: wifi worked on an earlier boot of this same OS" "  ... and is reported"
 
 # The next OS update, offline.
 fresh os-status-ok
