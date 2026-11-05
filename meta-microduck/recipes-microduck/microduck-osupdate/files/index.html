@@ -28,7 +28,10 @@
 </dl>
 <p><progress id="progress" max="100" value="0" hidden></progress></p>
 <p id="msg" role="status" aria-live="polite"></p>
+<p><button id="update" hidden></button></p>
 
+<details>
+<summary>Advanced: other builds and the other slot</summary>
 <h2>Install a build</h2>
 <label for="builds">Published builds (channel <span id="channel">…</span>)</label>
 <select id="builds"><option>Check for updates to list them</option></select>
@@ -47,6 +50,7 @@
 <p class="note">Installing writes the other slot and reboots into it; "Boot it" reboots
 into what that slot already holds, with no download. Either way the robot goes back
 by itself if the new system does not come up healthy.</p>
+</details>
 <script>
 const $ = (id) => document.getElementById(id);
 let last = null, listed = "";
@@ -101,6 +105,15 @@ function installPrompt(b, s) {
   return t;
 }
 
+// The board's channel's newest build when it is newer than the one running, else null.
+// available.env is on the shared data partition, so it may be the other slot's channel
+// (a stable check from a dev board's other slot): only this slot's channel counts.
+function latest(s) {
+  const a = s.available && s.builds.find((x) => x.build === s.available.build);
+  return a && a.channel === s.channel && installable(a, s) &&
+    !(s.installed_build && a.build <= s.installed_build) ? a : null;
+}
+
 // The list, grouped by channel, newest first; the channel's newest is "latest".
 function fillBuilds(s) {
   const key = JSON.stringify(s.builds) + s.installed_build + (s.other && s.other.build) + s.production;
@@ -149,6 +162,10 @@ function show(s) {
   const chosen = $("builds").value;
   $("install").disabled = busy || !/^[0-9]{14}$/.test(chosen) || chosen === s.installed_build;
   $("check").disabled = busy;
+  const l = latest(s);
+  $("update").hidden = !l;
+  $("update").disabled = busy;
+  if (l) $("update").textContent = "Update to " + l.version;
   const o = s.other || {};
   $("oslot").textContent = o.slot || "?";
   $("obuild").textContent = named(o.build, s) +
@@ -167,6 +184,11 @@ async function poll() {
   setTimeout(poll, last && last.phase === "idle" ? 10000 : 2000);
 }
 
+$("update").onclick = async () => {
+  const b = latest(last);
+  if (!b || !confirm(installPrompt(b, last))) return;
+  show(await call("POST", "/api/apply?build=" + encodeURIComponent(b.build)));
+};
 $("builds").onchange = () => last && show(last);
 $("check").onclick = async () => { $("msg").textContent = "Checking…"; show(await call("POST", "/api/check")); };
 $("install").onclick = async () => {
@@ -178,7 +200,16 @@ $("switch").onclick = async () => {
   if (!confirm("Reboot into slot " + last.other.slot + " (" + (last.other.build || "the flashed image") + ")?")) return;
   show(await call("POST", "/api/switch"));
 };
-poll();
+// Check on load, so the button reflects what is published now -- but not mid-update,
+// where the script's message is the update's progress.
+(async () => {
+  try {
+    const s = await call("GET", "/api/status");
+    show(s);
+    if (s.phase === "idle") { $("msg").textContent = "Checking for updates…"; show(await call("POST", "/api/check")); }
+  } catch (e) { /* poll says the robot is unreachable */ }
+  poll();
+})();
 </script>
 </body>
 </html>
