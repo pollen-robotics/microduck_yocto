@@ -136,9 +136,9 @@ check() {
 	i=$(installed_build)
 	# Build ids are UTC timestamps; a flashed slot without one counts as older.
 	if [ -n "$i" ] && [ "$b" -le "$i" ]; then
-		say "up to date: the newest $CHANNEL build is $v"
+		say "The newest $CHANNEL build is $v, so there is nothing to install."
 	else
-		say "update available: $v ($CHANNEL)"
+		say "Update available on the $CHANNEL channel: $v."
 	fi
 }
 
