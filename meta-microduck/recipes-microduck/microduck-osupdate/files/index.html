@@ -28,6 +28,8 @@
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   progress { width: 100%; height: .75rem; margin-top: 1rem; accent-color: var(--ink); }
   #msg { min-height: 1.5em; margin: .5rem 0 0; }
+  /* A refusal or a failed update: what to do about it has to be seen, not skimmed. */
+  #msg.warn { background: #fff4d1; border-left: 4px solid var(--duck); color: var(--duck-ink); padding: .6rem .8rem; border-radius: 0 .4rem .4rem 0; }
   .note { color: var(--muted); font-size: .9rem; max-width: 34rem; }
   /* The two slots side by side: the booted one solid, the one an install would write dashed. */
   .slots { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; align-items: start; }
@@ -116,7 +118,9 @@ function label(b, s) {
 function named(build, s) {
   if (!build) return "the flashed image";
   const b = s.builds.find((x) => x.build === build);
-  return b ? b.version + " (" + build + ")" : "Build " + build;
+  if (!b) return "Build " + build;
+  // A dev version already carries its build: "1.1.0+20261105090625".
+  return b.version.includes(build) ? b.version : b.version + " (" + build + ")";
 }
 
 // candidate and stable carry the shipping image, whose keyring trusts the
@@ -199,6 +203,7 @@ function show(s) {
   $("phase").textContent = PHASES[s.phase] || s.phase;
   $("result").textContent = s.last_result || "—";
   $("msg").textContent = s.message || "";
+  $("msg").classList.toggle("warn", !!s.failed);
   $("progress").hidden = s.phase !== "downloading";
   $("progress").value = s.progress;
   fillBuilds(s);
