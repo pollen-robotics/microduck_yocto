@@ -383,15 +383,45 @@ run "a healthy data partition passes" 0
 [ ! -e "$DATA/slot-health/.probe" ] && { pass=$((pass + 1)); echo "ok     ... and the probe file is removed"; } ||
 	{ fail=$((fail + 1)); echo "FAIL the probe file is removed"; }
 
-# The kernel's taint.
+# The kernel's taint: an oops fails only a new OS after a clean one.
 fresh oops
-echo 128 > "$STUB/tainted"
-run "a kernel that oopsed during boot fails the slot" 1
-expect_in "oopsed during this boot" "  ... and says why"
+run "flashed A, clean, passes" 0
+slot B "2026-10-28T10:00:00Z"; echo 128 > "$STUB/tainted"
+run "an update whose kernel oopsed, after a clean OS, fails the slot" 1
+expect_in "kernel(oopsed during this boot, tainted=128; A@, the latest OS that passed, did not)" "  ... and says why"
 
 fresh oops-and-more
-echo 4737 > "$STUB/tainted"   # D (128) with W (512), O (4096) and P (1)
+run "flashed A, clean, passes" 0
+slot B "2026-10-28T10:00:00Z"; echo 4737 > "$STUB/tainted"   # D (128) with W (512), O (4096) and P (1)
 run "an oops among other taints still fails" 1
+
+fresh oops-every-boot
+echo 128 > "$STUB/tainted"
+run "a board whose kernel oopses with no record yet passes" 0
+expect_in "warning: the kernel oopsed" "  ... and is reported"
+grep -qx 'A@ wifi bluetooth oopsed' "$RECORD" ||
+	{ fail=$((fail + 1)); echo "FAIL the oops is recorded: $(cat "$RECORD")"; }
+slot B "2026-10-28T10:00:00Z"
+run "so an update that oopses the same way still passes: the hardware, not the update" 0
+slot A "2026-10-29T09:00:00Z"; echo 0 > "$STUB/tainted"
+run "an update that boots clean passes" 0
+grep -qx 'A@2026-10-29T09:00:00Z wifi bluetooth' "$RECORD" ||
+	{ fail=$((fail + 1)); echo "FAIL a clean boot is recorded without oopsed"; }
+slot B "2026-10-30T09:00:00Z"; echo 128 > "$STUB/tainted"
+run "and the next update that oopses fails again: it follows a clean one" 1
+
+fresh same-os-oopses
+run "flashed A, clean, passes" 0
+echo 128 > "$STUB/tainted"
+run "the same OS oopsing later passes: reported, not failed" 0
+expect_in "warning: the kernel oopsed" "  ... and is reported"
+
+fresh oopsed-is-not-a-radio
+echo 128 > "$STUB/tainted"
+run "a board that oopsed passes, recorded with oopsed" 0
+slot B "2026-10-28T10:00:00Z"; echo 0 > "$STUB/tainted"
+run "an update is not held to an 'oopsed radio'" 0
+case $last in *"oopsed(working under"*) fail=$((fail + 1)); echo "FAIL oopsed was treated as a radio";; esac
 
 fresh warn-only
 echo 4609 > "$STUB/tainted"   # W, O and P, no D: what the vendor BSP leaves on every boot

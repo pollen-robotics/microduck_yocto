@@ -61,8 +61,12 @@
 # 5. Is the data partition mounted, read-write and writable? microduck-data skips a
 #    missing partition on purpose, so the daemons run on the rootfs's empty
 #    /var/lib/robot and the owner's policies, wifi and pad pairing look gone.
-# 6. Did the kernel oops during this boot? The D bit of /proc/sys/kernel/tainted.
-#    Not W: the vendor BSP warns on every boot.
+# 6. Did the kernel oops during this boot, when the latest OS that passed did not?
+#    The D bit of /proc/sys/kernel/tainted; not W, the vendor BSP warns on every
+#    boot. Held like a radio, in the same record: on a board whose hardware makes
+#    every kernel oops (a flaky peripheral), the current OS oopses too, and failing
+#    every new one would leave that board unable to take any update. So only a new
+#    OS after a clean one fails; anything else is a warning.
 # 7. Are the OS services a robot is reached through running? A fixed list, not "any
 #    failed unit": a unit allowed to fail (microduck-voice-bank) must not roll back
 #    a good OS.
@@ -142,9 +146,11 @@ kernel=$(uname -r)
 [ -d "$MODULES/$kernel" ] || bad="$bad kernel($kernel has no $MODULES/$kernel: not the slot's own kernel)"
 
 # 6. The kernel's D taint (bit 7): an oops since boot. Unreadable reads as clean.
+# Judged against the record, below.
 tainted=$(cat "$TAINTED" 2>/dev/null || true)
 case $tainted in '' | *[!0-9]*) tainted=0 ;; esac
-[ $((tainted / 128 % 2)) = 0 ] || bad="$bad kernel(oopsed during this boot, tainted=$tainted)"
+oopsed=""
+[ $((tainted / 128 % 2)) = 0 ] || oopsed=oopsed
 
 # 5. The data partition: the last mount on $DATA wins, as it does for the kernel.
 data_opts=$(awk -v p="$DATA" '$2 == p { o = $4 } END { print o }' "$MOUNTS" 2>/dev/null || true)
@@ -234,14 +240,16 @@ booted=$(rauc status --detailed --output-format=json 2>/dev/null |
 slot="$(printf '%s' "$booted" | grep -o '"bootname":"[^"]*"' | head -n 1 | cut -d'"' -f4)"
 os="$slot@$(printf '%s' "$booted" | grep -o '"installed":{"timestamp":"[^"]*"' | head -n 1 | cut -d'"' -f6)"
 
-# Lines are "<os> <radios>": this OS's own if it passed before, else the latest. Only a
-# new OS is held to them; the same OS is compared but not failed, below.
+# Lines are "<os> <radios> [oopsed]": this OS's own if it passed before, else the
+# latest. Only a new OS is held to them; the same OS is compared but not failed, below.
 was=""; was_os=""; held=""
 if [ -n "$slot" ] && [ -s "$RECORD" ]; then
 	was=$(grep "^$os " "$RECORD" || tail -n 1 "$RECORD")
 	was_os=${was%% *}
-	[ "$os" = "$was_os" ] || held=${was#* }
 fi
+# The radios on a record line: its words after the OS, but `oopsed`.
+radios_of() { for w in ${1#* }; do [ "$w" = oopsed ] || printf '%s ' "$w"; done; }
+[ -z "$was" ] || [ "$os" = "$was_os" ] || held=$(radios_of "$was")
 
 # missing: the radios this OS is held to that are not up, or nothing.
 missing() {
@@ -260,7 +268,7 @@ done
 if [ -z "$slot" ]; then
 	bad="$bad rauc(rauc status named no booted slot, so this OS could not install the next update)"
 elif [ -n "$was" ]; then
-	for radio in ${was#* }; do
+	for radio in $(radios_of "$was"); do
 		case " $radios " in *" $radio "*) continue ;; esac
 		if [ "$os" != "$was_os" ]; then
 			bad="$bad $radio(working under $was_os, the latest OS that passed, and not under this one${not_working:+;$not_working})"
@@ -269,6 +277,20 @@ elif [ -n "$was" ]; then
 				"that is the hardware or its surroundings, not an update, so it does not fail the slot"
 		fi
 	done
+fi
+
+# 6. An oops fails only a new OS that follows one that booted clean.
+if [ -n "$oopsed" ]; then
+	case " ${was#* } " in
+	*" oopsed "*) was_clean=no ;;
+	*) was_clean=yes ;;
+	esac
+	if [ -n "$was" ] && [ "$os" != "$was_os" ] && [ "$was_clean" = yes ]; then
+		bad="$bad kernel(oopsed during this boot, tainted=$tainted; $was_os, the latest OS that passed, did not)"
+	else
+		echo "warning: the kernel oopsed during this boot (tainted=$tainted), but the latest OS that passed" \
+			"did too, or this is that OS, or there is none; reported, not failing the slot"
+	fi
 fi
 
 if [ -n "$bad" ]; then
@@ -285,10 +307,12 @@ fi
 # Only a boot that passed sets what the next OS is held to. This slot's line replaces
 # its old one and goes last; only the OS each slot holds now can boot again. A failure
 # to write must not fail the slot: it only loses the comparison for the next update.
+words=$radios
+[ -z "$oopsed" ] || words="${words:+$words }oopsed"
 [ -z "$slot" ] || { mkdir -p "$(dirname "$RECORD")" &&
-	{ grep -v "^$slot@" "$RECORD"; printf '%s %s\n' "$os" "$radios"; } > "$RECORD.new" &&
+	{ grep -v "^$slot@" "$RECORD"; printf '%s %s\n' "$os" "$words"; } > "$RECORD.new" &&
 	mv "$RECORD.new" "$RECORD"; } 2>/dev/null ||
 	echo "warning: could not record this boot's radios in $RECORD"
-echo "every daemon came up, the kernel is the slot's own and did not oops, RAUC and the data" \
+echo "every daemon came up, the kernel is the slot's own and no oops is new, RAUC and the data" \
 	"partition work, the next OS update can run, $UNITS are active, radios: ${radios:-none};" \
 	"the slot can be marked good"
