@@ -114,6 +114,46 @@ rm -rf "$STATE"; mkdir -p "$STATE"; echo idle > "$STATE/phase"; rauc A 100 good 
 report
 check "an ordinary boot reports nothing" result=none
 
+# A power cut during an apply, from slot A towards build 200: no pending.env, the
+# phase it had reached, and the target it was applying.
+cut() {
+	rm -rf "$STATE"; mkdir -p "$STATE"
+	printf 'VERSION=1.2.0\nBUILD=200\n' > "$STATE/target.env"
+	echo "$1" > "$STATE/phase"
+}
+cut downloading; rauc A 100 good 150; uboot A 3 3
+report
+check "cut while downloading: interrupted" \
+	"result=interrupted while downloading; apply again to carry on" pending=no phase=idle
+
+cut installing; rauc A 100 good 150; uboot A 3 3
+report
+check "cut while RAUC was writing: interrupted" \
+	"result=interrupted while installing; apply again to carry on" pending=no phase=idle
+
+cut installing; rauc B 200 good 100; uboot B 3 3
+report
+check "cut after RAUC switched, the new slot passed: updated" "result=updated to 1.2.0" pending=no
+
+cut installing; rauc B 200 bad 100; uboot "B A" 3 0x2
+report
+check "cut after RAUC switched, the new slot failed on trial: kept" result=none pending=yes
+rauc A 100 good 200; uboot "B A" 0x2 0x0
+report
+check "  ... then U-Boot went back to A: rolled back" \
+	"result=rolled back: 1.2.0 did not come up, back on slot A" pending=no phase=idle
+
+cut installing; rauc A 100 good 200; uboot A 3 3
+report
+check "cut after RAUC switched, the new slot never reached userspace: rolled back" \
+	"result=rolled back: 1.2.0 did not come up, back on slot A" pending=no phase=idle
+
+cut downloading; rauc A 100 good 150; uboot A 3 3
+exec 8> "$STATE/lock"; flock 8
+report
+exec 8>&-
+check "an apply running (the lock held): left alone" result=none phase=downloading
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]

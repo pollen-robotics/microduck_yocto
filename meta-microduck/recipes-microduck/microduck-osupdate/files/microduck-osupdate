@@ -231,8 +231,35 @@ switch() {
 }
 
 boot_report() {
+	# This runs late in boot, after the health check; an apply started since then
+	# holds the lock and reports for itself.
+	exec 9> "$STATE/lock"
+	flock -n 9 || exit 0
 	p=$STATE/pending.env
-	[ -f "$p" ] || exit 0
+	t=$STATE/target.env
+	ph=$(cat "$STATE/phase" 2>/dev/null || true)
+	# RAUC records the build and switches the boot order before apply writes
+	# pending.env, so a power cut between the two leaves an install with no
+	# pending.env: the board boots it, or, once U-Boot gave up on it, is back on the
+	# old slot. Rebuilt here, the report below says which.
+	# shortcut: a cut in RAUC's last milliseconds, after it records the build and
+	# before it switches, reads as rolled back; fine for a status line.
+	if [ ! -f "$p" ] && [ "$ph" = installing ] && [ -f "$t" ]; then
+		b=$(field "$t" BUILD); from=
+		if [ "$(rauc_build)" = "$b" ]; then from=$(other_name)
+		elif [ "$(other_build)" = "$b" ]; then from=$(booted_name); fi
+		[ -z "$from" ] || printf 'VERSION=%s\nBUILD=%s\nFROM=%s\n' "$(field "$t" VERSION)" "$b" "$from" > "$p"
+	fi
+	if [ ! -f "$p" ]; then
+		# An apply that a power cut or a reboot stopped before it installed anything.
+		# Until the next apply or check, status would go on showing it as under way.
+		case "$ph" in
+		checking | downloading | installing)
+			r="interrupted while $ph; apply again to carry on"
+			printf '%s\n' "$r" > "$STATE/result"; say "$r"; phase idle ;;
+		esac
+		exit 0
+	fi
 	build=$(field "$p" BUILD); version=$(field "$p" VERSION); from=$(field "$p" FROM)
 	how=$(field "$p" HOW); how=${how:-updated}
 	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
