@@ -92,6 +92,7 @@ run() {
 		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
 		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts SLOT_HEALTH_TAINTED=$STUB/tainted \
 		SLOT_HEALTH_DEV=$DEVDIR SLOT_HEALTH_OSUPDATE=$OSUPDATE \
+		SLOT_HEALTH_KEYRING=$STUB/keyring.pem \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -121,9 +122,11 @@ fresh() {
 	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
 	echo 0 > "$STUB/tainted"
 	: > "$DEVDIR/ttyS2"; : > "$DEVDIR/video0"; : > "$DEVDIR/snd/pcmC0D0p"
-	# The update path: osupdate's status as the script prints it.
+	# The update path: osupdate's status as the script prints it, a keyring with a
+	# certificate.
 	OSUPDATE=$work/bin/microduck-osupdate
 	echo '{"machine":"microduck-zero3","channel":"dev","production":false,"slot":"A","installed_build":"20261105161953","available":null,"other":null,"builds":[],"phase":"idle","progress":0,"message":"","last_result":""}' > "$STUB/osupdate"
+	printf -- '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n' > "$STUB/keyring.pem"
 }
 # expect_in TEXT NAME: the last run's output says TEXT.
 expect_in() {
@@ -420,6 +423,15 @@ run "a status naming no machine fails the slot" 1
 fresh osupdate-not-json
 echo "Usage: microduck-osupdate status|check|apply" > "$STUB/osupdate"
 run "a status that is not its JSON fails the slot" 1
+
+fresh keyring-empty
+: > "$STUB/keyring.pem"
+run "an empty RAUC keyring fails the slot" 1
+expect_in "keyring(no certificate" "  ... and says why"
+
+fresh keyring-missing
+rm "$STUB/keyring.pem"
+run "a missing RAUC keyring fails the slot" 1
 
 # Hardware that may be unplugged: reported, never failed.
 fresh no-devices

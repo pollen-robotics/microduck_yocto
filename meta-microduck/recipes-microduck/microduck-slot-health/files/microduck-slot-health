@@ -70,6 +70,7 @@
 #    a robot booted away from its network must pass:
 #    - `microduck-osupdate status` answers with this board's machine (it reads RAUC
 #      and local state, never the network);
+#    - the RAUC keyring holds a certificate: without one every bundle is refused;
 #
 # Reported, never failed: the hardware the robot needs that may simply be unplugged
 # or absent on this board -- the motor bus, the camera, the sound card. A missing
@@ -97,6 +98,7 @@ MOUNTS=${SLOT_HEALTH_MOUNTS:-/proc/mounts}
 TAINTED=${SLOT_HEALTH_TAINTED:-/proc/sys/kernel/tainted}
 DEV=${SLOT_HEALTH_DEV:-/dev}
 OSUPDATE=${SLOT_HEALTH_OSUPDATE:-/usr/bin/microduck-osupdate}
+KEYRING=${SLOT_HEALTH_KEYRING:-/usr/lib/rauc/keyring.pem}
 # dbus.service is also dbus-broker's alias, so this holds whichever the image runs.
 UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service"
 
@@ -165,6 +167,8 @@ else
 	*) bad="$bad osupdate($OSUPDATE status failed or named no machine)" ;;
 	esac
 fi
+grep -q 'BEGIN CERTIFICATE' "$KEYRING" 2>/dev/null ||
+	bad="$bad keyring(no certificate in $KEYRING: every bundle would be refused)"
 
 # Reported, never failed (see the header).
 for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcmC*"; do
