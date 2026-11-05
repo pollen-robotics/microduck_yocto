@@ -238,12 +238,17 @@ boot_report() {
 	p=$STATE/pending.env
 	t=$STATE/target.env
 	ph=$(cat "$STATE/phase" 2>/dev/null || true)
-	# RAUC switches the boot order before apply writes pending.env, so a power cut
-	# between the two boots the new build with no pending.env: report it as installed.
-	if [ ! -f "$p" ] && [ "$ph" = installing ] && [ -f "$t" ] &&
-		[ "$(rauc_build)" = "$(field "$t" BUILD)" ]; then
-		v=$(field "$t" VERSION); b=$(field "$t" BUILD)
-		printf 'VERSION=%s\nBUILD=%s\nFROM=\n' "$v" "$b" > "$p"
+	# RAUC records the build and switches the boot order before apply writes
+	# pending.env, so a power cut between the two leaves an install with no
+	# pending.env: the board boots it, or, once U-Boot gave up on it, is back on the
+	# old slot. Rebuilt here, the report below says which.
+	# shortcut: a cut in RAUC's last milliseconds, after it records the build and
+	# before it switches, reads as rolled back; fine for a status line.
+	if [ ! -f "$p" ] && [ "$ph" = installing ] && [ -f "$t" ]; then
+		b=$(field "$t" BUILD); from=
+		if [ "$(rauc_build)" = "$b" ]; then from=$(other_name)
+		elif [ "$(other_build)" = "$b" ]; then from=$(booted_name); fi
+		[ -z "$from" ] || printf 'VERSION=%s\nBUILD=%s\nFROM=%s\n' "$(field "$t" VERSION)" "$b" "$from" > "$p"
 	fi
 	if [ ! -f "$p" ]; then
 		# An apply that a power cut or a reboot stopped before it installed anything.
