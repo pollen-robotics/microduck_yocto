@@ -56,6 +56,19 @@ cat > "$work/bin/fw_printenv" <<'EOF'
 [ "$1" = -n ] || { echo "fw_printenv called as: $*"; exit 99; }
 cat "$STUB/env/$2" 2>/dev/null
 EOF
+# microduck-osupdate: only `status` may be asked -- `check` and `apply` reach the
+# network, and the health check must pass offline. Prints $STUB/osupdate; a missing
+# file is a status that fails.
+cat > "$work/bin/microduck-osupdate" <<'EOF'
+#!/bin/sh
+[ "$*" = status ] || { echo "microduck-osupdate called as: $*" >> "$STUB/forbidden"; exit 99; }
+cat "$STUB/osupdate" 2>/dev/null
+EOF
+# Nothing may fetch anything.
+cat > "$work/bin/curl" <<'EOF'
+#!/bin/sh
+echo "curl $*" >> "$STUB/forbidden"; exit 7
+EOF
 # `is-active --quiet UNIT` fails for a unit listed in $STUB/inactive. Anything else
 # is recorded, so a case can tell whether the board would reboot.
 cat > "$work/bin/systemctl" <<'EOF'
@@ -78,7 +91,7 @@ run() {
 		SLOT_HEALTH_SYS=$SYSROOT SLOT_HEALTH_MODULES=$MODS SLOT_HEALTH_RECORD=$RECORD \
 		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
 		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts SLOT_HEALTH_TAINTED=$STUB/tainted \
-		SLOT_HEALTH_DEV=$DEVDIR \
+		SLOT_HEALTH_DEV=$DEVDIR SLOT_HEALTH_OSUPDATE=$OSUPDATE \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -108,6 +121,9 @@ fresh() {
 	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
 	echo 0 > "$STUB/tainted"
 	: > "$DEVDIR/ttyS2"; : > "$DEVDIR/video0"; : > "$DEVDIR/snd/pcmC0D0p"
+	# The update path: osupdate's status as the script prints it.
+	OSUPDATE=$work/bin/microduck-osupdate
+	echo '{"machine":"microduck-zero3","channel":"dev","production":false,"slot":"A","installed_build":"20261105161953","available":null,"other":null,"builds":[],"phase":"idle","progress":0,"message":"","last_result":""}' > "$STUB/osupdate"
 }
 # expect_in TEXT NAME: the last run's output says TEXT.
 expect_in() {
@@ -380,6 +396,30 @@ slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3
 printf '/dev/root / ext4 rw 0 0\n' > "$STUB/mounts"
 run "an update on trial without its data partition fails" 1
 expect_reboot yes "  ... and is rebooted like any other failure on trial"
+
+# The next OS update, offline.
+fresh os-status-ok
+run "a board whose update path is intact passes" 0
+[ ! -s "$STUB/forbidden" ] && { pass=$((pass + 1)); echo "ok     ... and nothing reached for the network"; } ||
+	{ fail=$((fail + 1)); echo "FAIL the check stays offline:"; sed 's/^/     | /' "$STUB/forbidden"; }
+
+fresh no-osupdate
+OSUPDATE=$work/nowhere/microduck-osupdate
+run "no microduck-osupdate fails the slot" 1
+expect_in "osupdate(no " "  ... and says why"
+
+fresh osupdate-fails
+rm "$STUB/osupdate"
+run "microduck-osupdate status failing fails the slot" 1
+expect_in "status failed or named no machine" "  ... and says why"
+
+fresh osupdate-no-machine
+sed -i 's/"machine":"microduck-zero3"/"machine":""/' "$STUB/osupdate"
+run "a status naming no machine fails the slot" 1
+
+fresh osupdate-not-json
+echo "Usage: microduck-osupdate status|check|apply" > "$STUB/osupdate"
+run "a status that is not its JSON fails the slot" 1
 
 # Hardware that may be unplugged: reported, never failed.
 fresh no-devices

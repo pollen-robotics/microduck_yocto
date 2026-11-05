@@ -65,6 +65,11 @@
 # 7. Are the OS services a robot is reached through running? A fixed list, not "any
 #    failed unit": a unit allowed to fail (microduck-voice-bank) must not roll back
 #    a good OS.
+# 8. Can this OS take the next OS update? What `os status`, `os check` and `os
+#    apply` need on the robot itself, all read offline -- wifi may well be down, and
+#    a robot booted away from its network must pass:
+#    - `microduck-osupdate status` answers with this board's machine (it reads RAUC
+#      and local state, never the network);
 #
 # Reported, never failed: the hardware the robot needs that may simply be unplugged
 # or absent on this board -- the motor bus, the camera, the sound card. A missing
@@ -91,6 +96,7 @@ DATA=${SLOT_HEALTH_DATA:-/var/lib/robot}
 MOUNTS=${SLOT_HEALTH_MOUNTS:-/proc/mounts}
 TAINTED=${SLOT_HEALTH_TAINTED:-/proc/sys/kernel/tainted}
 DEV=${SLOT_HEALTH_DEV:-/dev}
+OSUPDATE=${SLOT_HEALTH_OSUPDATE:-/usr/bin/microduck-osupdate}
 # dbus.service is also dbus-broker's alias, so this holds whichever the image runs.
 UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service"
 
@@ -148,6 +154,17 @@ esac
 for unit in $UNITS; do
 	systemctl is-active --quiet "$unit" || bad="$bad $unit(not active)"
 done
+
+# 8. The next OS update, offline.
+if [ ! -x "$OSUPDATE" ]; then
+	bad="$bad osupdate(no $OSUPDATE: this OS could not be updated)"
+else
+	os_status=$("$OSUPDATE" status 2>/dev/null) || os_status=""
+	case $os_status in
+	*'"machine":"'[a-z0-9]*) ;;
+	*) bad="$bad osupdate($OSUPDATE status failed or named no machine)" ;;
+	esac
+fi
 
 # Reported, never failed (see the header).
 for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcmC*"; do
