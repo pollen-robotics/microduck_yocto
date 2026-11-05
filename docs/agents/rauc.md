@@ -369,6 +369,12 @@ automatically; the robot loops on it. That is `switch` (if it is reachable) or a
 reflash. The trade is deliberate: such a robot is rare, and one reverted over a
 battery or a motor is not. An update that never comes up still rolls back.
 
+A panic or a hang reboots on its own (2026-11-05):
+`CONFIG_PANIC_TIMEOUT=10` in the kernel, and systemd feeding the SoC's hardware
+watchdog with `RuntimeWatchdogSec=30s` (`meta-microduck-bsp/recipes-core/systemd`).
+Each of those reboots spends an attempt, so a slot on trial that never reaches
+`microduck-slot-health` falls back like one that fails it.
+
 `scripts/test-slot-trial.sh` runs every case (CI: `slot-health.yml`).
 
 ## What is not done

@@ -40,6 +40,7 @@ SRC_URI = " \
     file://no-mali400.cfg \
     file://qemu-virt.cfg \
     file://rauc.cfg \
+    file://watchdog.cfg \
 "
 
 # Reproducible boot.img: microduck-bundle refuses a bundle whose boot.img differs from the card's.
