@@ -66,6 +66,11 @@
 #    failed unit": a unit allowed to fail (microduck-voice-bank) must not roll back
 #    a good OS.
 #
+# Reported, never failed: the hardware the robot needs that may simply be unplugged
+# or absent on this board -- the motor bus, the camera, the sound card. A missing
+# one is logged so it can be fixed, as robotd reports servos and the IMU, and the
+# slot passes: failing it would roll back a good OS over a cable.
+#
 # Paths can be pointed elsewhere for scripts/test-slot-health.sh.
 set -eu
 
@@ -85,6 +90,7 @@ CMDLINE=${SLOT_HEALTH_CMDLINE:-/proc/cmdline}
 DATA=${SLOT_HEALTH_DATA:-/var/lib/robot}
 MOUNTS=${SLOT_HEALTH_MOUNTS:-/proc/mounts}
 TAINTED=${SLOT_HEALTH_TAINTED:-/proc/sys/kernel/tainted}
+DEV=${SLOT_HEALTH_DEV:-/dev}
 # dbus.service is also dbus-broker's alias, so this holds whichever the image runs.
 UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service"
 
@@ -141,6 +147,15 @@ esac
 # 7. The services a robot is reached and debugged through.
 for unit in $UNITS; do
 	systemctl is-active --quiet "$unit" || bad="$bad $unit(not active)"
+done
+
+# Reported, never failed (see the header).
+for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcmC*"; do
+	name=${spec%%:*}
+	found=no
+	for dev in ${spec#*:}; do [ -e "$dev" ] && { found=yes; break; }; done
+	[ "$found" = yes ] ||
+		echo "warning: no $name (${spec#*:}): unplugged, or this board has none; reported, not failing the slot"
 done
 
 # The radios the kernel has brought up: a wifi interface once the driver has loaded its

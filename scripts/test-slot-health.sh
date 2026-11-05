@@ -78,6 +78,7 @@ run() {
 		SLOT_HEALTH_SYS=$SYSROOT SLOT_HEALTH_MODULES=$MODS SLOT_HEALTH_RECORD=$RECORD \
 		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
 		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts SLOT_HEALTH_TAINTED=$STUB/tainted \
+		SLOT_HEALTH_DEV=$DEVDIR \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -100,12 +101,13 @@ fresh() {
 	slot A ""
 	radios wifi bluetooth
 	uboot A A 3 3
-	# The data partition mounted read-write.
-	DATA=$case_dir/datapart
-	mkdir -p "$DATA"
+	# The data partition mounted read-write, a clean kernel, every unit active, and
+	# the motor bus, a camera and a sound card present.
+	DATA=$case_dir/datapart DEVDIR=$case_dir/dev
+	mkdir -p "$DATA" "$DEVDIR/snd"
 	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
-	# A kernel that has not oopsed.
 	echo 0 > "$STUB/tainted"
+	: > "$DEVDIR/ttyS2"; : > "$DEVDIR/video0"; : > "$DEVDIR/snd/pcmC0D0p"
 }
 # expect_in TEXT NAME: the last run's output says TEXT.
 expect_in() {
@@ -378,6 +380,18 @@ slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3
 printf '/dev/root / ext4 rw 0 0\n' > "$STUB/mounts"
 run "an update on trial without its data partition fails" 1
 expect_reboot yes "  ... and is rebooted like any other failure on trial"
+
+# Hardware that may be unplugged: reported, never failed.
+fresh no-devices
+rm -f "$DEVDIR/ttyS2" "$DEVDIR/video0" "$DEVDIR/snd/pcmC0D0p"
+run "no motor bus, camera or sound card still passes" 0
+expect_in "warning: no motor bus" "  ... the motor bus is reported"
+expect_in "warning: no camera" "  ... the camera is reported"
+expect_in "warning: no sound card" "  ... the sound card is reported"
+
+fresh all-devices
+run "a board with everything plugged in" 0
+case $last in *"warning: no "*) fail=$((fail + 1)); echo "FAIL   ... reports nothing missing";; *) pass=$((pass + 1)); echo "ok     ... reports nothing missing";; esac
 
 fresh unwritable
 mkdir -p "$(dirname "$RECORD")"; chmod 0555 "$(dirname "$RECORD")"
