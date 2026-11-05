@@ -19,3 +19,5 @@ jobs:
       # The battery gate in the script, against fixed robotctl output. dash, like the
       # board's busybox sh: POSIX only.
       - run: sh scripts/test-osupdate-battery.sh
+      # status keeps answering while RAUC installs.
+      - run: sh scripts/test-osupdate-status.sh
