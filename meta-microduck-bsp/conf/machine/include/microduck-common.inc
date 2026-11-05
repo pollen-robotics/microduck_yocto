@@ -39,10 +39,12 @@ MICRODUCK_MOTOR_UART ?= "1"
 MACHINEOVERRIDES =. "microduck-machine:"
 
 # Which electronic board this is, in microduck_daemon's terms ([board] version in
-# robotd.toml: "zero3" or "beta"). microduck-board writes it into the image; the
-# updater derives the hardware revision a release is checked against from it. Each
-# machine conf sets its own.
+# robotd.toml: "zero3", "beta" or "face-board-v1"). microduck-board writes it into
+# the image; the updater derives the hardware revision a release is checked against
+# from it. Each machine conf sets its own. MICRODUCK_BOARD_FALLBACK is what to
+# declare instead when the seeded daemon predates MICRODUCK_BOARD's name.
 MICRODUCK_BOARD ?= ""
+MICRODUCK_BOARD_FALLBACK ?= ""
 
 # The radio's userspace, per machine: what microduck-image installs for the
 # Bluetooth attach, and what microduck-image-dev adds for diagnosing it. The
