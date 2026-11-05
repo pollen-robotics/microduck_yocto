@@ -289,4 +289,6 @@ fi
 	{ grep -v "^$slot@" "$RECORD"; printf '%s %s\n' "$os" "$radios"; } > "$RECORD.new" &&
 	mv "$RECORD.new" "$RECORD"; } 2>/dev/null ||
 	echo "warning: could not record this boot's radios in $RECORD"
-echo "every daemon came up, the kernel is the slot's own, radios: ${radios:-none}; the slot can be marked good"
+echo "every daemon came up, the kernel is the slot's own and did not oops, RAUC and the data" \
+	"partition work, the next OS update can run, $UNITS are active, radios: ${radios:-none};" \
+	"the slot can be marked good"
