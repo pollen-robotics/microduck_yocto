@@ -71,7 +71,7 @@ run() {
 	out=$(PATH="$work/bin:$PATH" STUB=$STUB SYSROOT=$SYSROOT SLOT_HEALTH_UPTIME=$STUB/uptime \
 		SLOT_HEALTH_SYS=$SYSROOT SLOT_HEALTH_MODULES=$MODS SLOT_HEALTH_RECORD=$RECORD \
 		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
-		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts \
+		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts SLOT_HEALTH_TAINTED=$STUB/tainted \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -98,6 +98,8 @@ fresh() {
 	DATA=$case_dir/datapart
 	mkdir -p "$DATA"
 	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
+	# A kernel that has not oopsed.
+	echo 0 > "$STUB/tainted"
 }
 # expect_in TEXT NAME: the last run's output says TEXT.
 expect_in() {
@@ -336,6 +338,24 @@ fresh data-probe-cleaned
 run "a healthy data partition passes" 0
 [ ! -e "$DATA/slot-health/.probe" ] && { pass=$((pass + 1)); echo "ok     ... and the probe file is removed"; } ||
 	{ fail=$((fail + 1)); echo "FAIL the probe file is removed"; }
+
+# The kernel's taint.
+fresh oops
+echo 128 > "$STUB/tainted"
+run "a kernel that oopsed during boot fails the slot" 1
+expect_in "oopsed during this boot" "  ... and says why"
+
+fresh oops-and-more
+echo 4737 > "$STUB/tainted"   # D (128) with W (512), O (4096) and P (1)
+run "an oops among other taints still fails" 1
+
+fresh warn-only
+echo 4609 > "$STUB/tainted"   # W, O and P, no D: what the vendor BSP leaves on every boot
+run "warnings and out-of-tree modules alone pass" 0
+
+fresh taint-garbage
+echo nonsense > "$STUB/tainted"
+run "an unreadable taint reads as clean" 0
 
 fresh trial-data-fails
 slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3
