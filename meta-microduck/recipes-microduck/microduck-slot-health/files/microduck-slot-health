@@ -51,6 +51,13 @@
 #    finish before a slow driver has loaded its firmware, and the radios this OS is
 #    held to are the ones worth waiting for. On the beta board both are up by 12 s.
 #
+# More, each something an OS update can break and that answers the same on a bench
+# board with no servos, camera or network:
+#
+# 4. Does RAUC work? `rauc status` must name the booted slot. An OS whose RAUC
+#    cannot is one no update can ever replace -- the one regression that turns a bad
+#    update into a reflash.
+#
 # Paths can be pointed elsewhere for scripts/test-slot-health.sh.
 set -eu
 
@@ -140,9 +147,10 @@ while [ -n "$(missing)" ] && [ "$(uptime_secs)" -lt "$RADIO_DEADLINE" ]; do
 	scan_radios
 done
 
-# Without a slot name every boot would look like a new OS, so compare nothing.
+# 4. Without a slot name RAUC cannot install the next update -- and every boot would
+# look like a new OS, so radios are not compared either.
 if [ -z "$slot" ]; then
-	echo "warning: rauc status named no booted slot, so radios are neither compared nor recorded"
+	bad="$bad rauc(rauc status named no booted slot, so this OS could not install the next update)"
 elif [ -n "$was" ]; then
 	for radio in ${was#* }; do
 		case " $radios " in *" $radio "*) continue ;; esac

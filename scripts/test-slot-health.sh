@@ -94,6 +94,11 @@ fresh() {
 	radios wifi bluetooth
 	uboot A A 3 3
 }
+# expect_in TEXT NAME: the last run's output says TEXT.
+expect_in() {
+	case $last in *"$1"*) pass=$((pass + 1)); echo "ok   $2" ;;
+	*) fail=$((fail + 1)); echo "FAIL $2"; echo "$last" | sed 's/^/     | /' ;; esac
+}
 # booted slot (rauc.slot= on the command line), BOOT_ORDER, BOOT_A_LEFT, BOOT_B_LEFT.
 # A flashed card: "A A 3 3". Just after an install into B: "B 'B A' 3 3".
 uboot() {
@@ -212,8 +217,8 @@ fresh rauc-fails
 radios wifi
 run "A with wifi only passes" 0
 rm "$STUB/rauc"; radios
-run "a boot where rauc status fails is not compared" 0
-case $last in *"neither compared nor recorded"*) ;; *) fail=$((fail + 1)); echo "FAIL the skipped comparison is logged";; esac
+run "a boot where rauc status fails fails the slot: no update could replace it" 1
+expect_in "rauc(rauc status named no booted slot" "  ... and says why"
 [ "$(cat "$RECORD")" = 'A@ wifi' ] ||
 	{ fail=$((fail + 1)); echo "FAIL a boot with no slot name leaves the record alone"; }
 
