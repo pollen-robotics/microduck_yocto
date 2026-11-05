@@ -326,7 +326,14 @@ boot_report() {
 jstr() { printf '"%s"' "$(printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 
 status() {
-	RAUC_JSON=$(rauc_json)
+	# RAUC answers no status while it installs, and set -e would end this with nothing
+	# printed: the page read that as "robot unreachable" mid-update. The slots do not
+	# change until the install ends, so the last answer stands in.
+	if RAUC_JSON=$(rauc_json) && [ -n "$RAUC_JSON" ]; then
+		printf '%s\n' "$RAUC_JSON" > "$STATE/rauc.json"
+	else
+		RAUC_JSON=$(cat "$STATE/rauc.json" 2>/dev/null || true)
+	fi
 	ph=$(cat "$STATE/phase" 2>/dev/null || echo idle)
 	progress=0
 	a=$STATE/available.env
