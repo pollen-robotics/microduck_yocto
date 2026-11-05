@@ -28,7 +28,7 @@
 </dl>
 <p><progress id="progress" max="100" value="0" hidden></progress></p>
 <p id="msg" role="status" aria-live="polite"></p>
-<p><button id="update" hidden></button></p>
+<p><button id="update" disabled>Checking…</button></p>
 
 <details>
 <summary>Advanced: other builds and the other slot</summary>
@@ -163,9 +163,10 @@ function show(s) {
   $("install").disabled = busy || !/^[0-9]{14}$/.test(chosen) || chosen === s.installed_build;
   $("check").disabled = busy;
   const l = latest(s);
-  $("update").hidden = !l;
-  $("update").disabled = busy;
-  if (l) $("update").textContent = "Update to " + l.version;
+  // Always shown, greyed when there is nothing to install, so "no button" never has to
+  // be read as "up to date".
+  $("update").disabled = busy || !l;
+  $("update").textContent = l ? "Update to " + l.version : s.available ? "Up to date" : "No update information";
   const o = s.other || {};
   $("oslot").textContent = o.slot || "?";
   $("obuild").textContent = named(o.build, s) +

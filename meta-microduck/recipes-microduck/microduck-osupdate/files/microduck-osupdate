@@ -132,7 +132,14 @@ check() {
 	board_machine
 	load_index
 	load_manifest "$CHANNEL.env" "$STATE/available.env"
-	say "checked $CHANNEL: $(field "$STATE/available.env" VERSION)"
+	v=$(field "$STATE/available.env" VERSION); b=$(field "$STATE/available.env" BUILD)
+	i=$(installed_build)
+	# Build ids are UTC timestamps; a flashed slot without one counts as older.
+	if [ -n "$i" ] && [ "$b" -le "$i" ]; then
+		say "up to date: the newest $CHANNEL build is $v"
+	else
+		say "update available: $v ($CHANNEL)"
+	fi
 }
 
 # updaterd takes this lock to install, roll back or select a daemon release, and
