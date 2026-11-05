@@ -27,6 +27,7 @@ BASE_URL=https://huggingface.co/buckets/pollen-robotics/microduck-os/resolve
 # production-signed bundles, and only stable carries those.
 production() { [ ! -e /usr/lib/rauc/ca-dev.cert.pem ]; }
 if production; then CHANNEL=stable; else CHANNEL=dev; fi
+MIN_BATTERY_PCT=30
 # Root-owned local configuration, so sourcing it is fine (unlike the manifest).
 [ ! -r /etc/microduck-osupdate.conf ] || . /etc/microduck-osupdate.conf
 # Overridable for scripts/test-osupdate-boot-report.sh only.
@@ -86,6 +87,22 @@ on_trial() {
 other_good() {
 	other_slot_json | grep -q '"boot_status":"good"' ||
 		grep -qx "$(other_name)@$(other_installed)" "$GOOD_RECORD" 2>/dev/null
+}
+
+# No fuel gauge: robotd reads the pack through the servos' supply (robotctl health).
+# A dying pack mid-install costs the update, not the board (RAUC writes the other
+# slot), but we would rather not start one. No reading -- servos off or not answering
+# -- refuses nothing; nor does a rail under 6 V, which is a bench supply rather than
+# the 2S pack (robotd powers the robot off at 6.6 V). Same 30% that clients call low
+# (duck-ipc-proto's Battery::LOW_PCT).
+battery_ok() {
+	set -- $(robotctl health --json 2>/dev/null | awk -F: '
+		/"battery": *\{/ { b = 1; next }
+		b && /"volts"/ { v = $2 + 0 }
+		b && /"percent"/ { p = $2 + 0 }
+		b && /\}/ { print int(v * 10), int(p); exit }')
+	BATTERY_PCT=${2:-}
+	[ -z "$BATTERY_PCT" ] || [ "$1" -lt 60 ] || [ "$BATTERY_PCT" -ge "$MIN_BATTERY_PCT" ]
 }
 
 # field FILE KEY: the first KEY= line's value.
@@ -181,6 +198,8 @@ apply() {
 	if [ "$build" = "$(other_build)" ] && other_good; then
 		switch_slot "$version"
 	fi
+
+	battery_ok || fail "battery at $BATTERY_PCT%: charge the robot above $MIN_BATTERY_PCT% before updating"
 
 	# On the data partition: 7 GiB free, where the 2 GiB rootfs has ~1.
 	phase downloading; say "downloading $version"
