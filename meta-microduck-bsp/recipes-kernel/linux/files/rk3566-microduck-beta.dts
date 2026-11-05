@@ -64,6 +64,14 @@
 	};
 
 	/*
+	 * The alias swap above leaves serial-id 2 pointing at the enabled motor
+	 * bus, which the fiq-debugger driver refuses: 3 resolves to uart2.
+	 */
+	fiq-debugger {
+		rockchip,serial-id = <3>;
+	};
+
+	/*
 	 * rk3568-linux.dtsi's bootargs carry root=PARTUUID=614e0000-0000. Replaced,
 	 * not appended to, for the reason 0001-*-restore-chosen-bootargs.patch gives
 	 * for the Zero 3W: U-Boot's RAUC script passes root=PARTLABEL=rootfs_a|b,
