@@ -5,6 +5,40 @@ Linux PC or a Mac. The procedure is for the microduck main board with the **V1.0
 board** (machine `microduck-face-board-v1`). After this first flash the robot
 updates itself over the network, so this is done once per robot.
 
+## Quick reference
+
+[`scripts/flash-emmc.sh`](#with-the-script) does everything below. Put the
+robot in flashing mode (hold Recovery while powering it on), then:
+
+Flash the latest release (the shipping image):
+
+```sh
+scripts/flash-emmc.sh release microduck-face-board-v1
+```
+
+Flash the latest dev build of `main` (the dev image, with root login and debug
+tools):
+
+```sh
+scripts/flash-emmc.sh dev microduck-face-board-v1
+```
+
+For the beta board, use `microduck-beta` in place of `microduck-face-board-v1`.
+Each run shows the build it picked and asks before writing.
+
+| To | Run |
+|---|---|
+| See which build would be flashed, without writing | `scripts/flash-emmc.sh latest dev microduck-beta` |
+| Flash a given release | `scripts/flash-emmc.sh microduck-os-v1.0.1 microduck-beta` |
+| Flash without the confirmation question | `FLASH_EMMC_YES=1 scripts/flash-emmc.sh release microduck-beta` |
+| Rewrite only the bootloader of a board stuck in maskrom | `scripts/flash-emmc.sh recover dev microduck-beta` |
+| Back up a whole eMMC (about an hour) | `scripts/flash-emmc.sh dump backup.img microduck-beta` |
+| All options | `scripts/flash-emmc.sh --help` |
+
+`dev` and `recover` read the build cache bucket, so they need the Hugging Face
+CLI (`hf`), logged in. Power-cycle the robot after a flash; do not use
+`rkdeveloptool rd`.
+
 ## What you need
 
 - A Linux PC (Debian or Ubuntu) with:
@@ -111,9 +145,25 @@ Maskrom, then `rfi` and `wl`.
 scripts/flash-emmc.sh microduck-os-v1.0.1
 ```
 
-Without a tag it takes the latest release. The files stay in
+Without a tag it takes the latest release. Before downloading anything it
+shows the release and image it is about to write and asks for confirmation
+(`FLASH_EMMC_YES=1` skips the question). The files stay in
 `~/microduck-flash/<tag>`, so for the next robot just run it again and put
 the robot in flashing mode. Power-cycling at the end is still up to you.
+
+It flashes the face board V1.0 unless told otherwise; for the beta board, name
+the board after the release (or after `release`, for the latest one):
+
+```sh
+scripts/flash-emmc.sh release microduck-beta
+```
+
+For development, `dev` instead of a tag flashes the dev image of `main`'s
+newest CI build, from the build cache bucket (needs the Hugging Face CLI,
+logged in). `scripts/flash-emmc.sh latest dev microduck-beta` prints which
+build that is without writing anything, and `scripts/flash-emmc.sh --help`
+lists the rest: `recover` for a board stuck in maskrom, `dump` to back up a
+whole eMMC.
 
 ## Check the robot booted
 
