@@ -71,6 +71,7 @@ run() {
 	out=$(PATH="$work/bin:$PATH" STUB=$STUB SYSROOT=$SYSROOT SLOT_HEALTH_UPTIME=$STUB/uptime \
 		SLOT_HEALTH_SYS=$SYSROOT SLOT_HEALTH_MODULES=$MODS SLOT_HEALTH_RECORD=$RECORD \
 		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
+		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -93,6 +94,10 @@ fresh() {
 	slot A ""
 	radios wifi bluetooth
 	uboot A A 3 3
+	# The data partition mounted read-write.
+	DATA=$case_dir/datapart
+	mkdir -p "$DATA"
+	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
 }
 # expect_in TEXT NAME: the last run's output says TEXT.
 expect_in() {
@@ -305,6 +310,38 @@ slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3; echo "root=/dev/mmcblk0p4" > "
 echo 3 > "$STUB/bootcheck"
 run "no rauc.slot= on the command line" 1
 expect_reboot no "  ... means no reboot"
+
+# The data partition.
+fresh data-unmounted
+printf '/dev/root / ext4 rw,relatime 0 0\n' > "$STUB/mounts"
+run "the data partition not mounted fails the slot" 1
+expect_in "data(" "  ... and says why"
+
+fresh data-ro
+printf '/dev/root / ext4 rw 0 0\n/dev/mmcblk1p6 %s ext4 ro,relatime 0 0\n' "$DATA" > "$STUB/mounts"
+run "the data partition mounted read-only fails the slot" 1
+expect_in "is mounted read-only" "  ... and says why"
+
+fresh data-remounted
+printf '/dev/mmcblk1p6 %s ext4 ro 0 0\n/dev/mmcblk1p6 %s ext4 rw 0 0\n' "$DATA" "$DATA" > "$STUB/mounts"
+run "the last mount on the data partition is the one that counts" 0
+
+fresh data-unwritable
+: > "$DATA/slot-health"   # a file where the directory should be: unwritable even as root
+run "a data partition nothing can be written to fails the slot" 1
+expect_in "cannot write to" "  ... and says why"
+[ ! -e "$DATA/slot-health/.probe" ] || { fail=$((fail + 1)); echo "FAIL the probe file is left behind"; }
+
+fresh data-probe-cleaned
+run "a healthy data partition passes" 0
+[ ! -e "$DATA/slot-health/.probe" ] && { pass=$((pass + 1)); echo "ok     ... and the probe file is removed"; } ||
+	{ fail=$((fail + 1)); echo "FAIL the probe file is removed"; }
+
+fresh trial-data-fails
+slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3
+printf '/dev/root / ext4 rw 0 0\n' > "$STUB/mounts"
+run "an update on trial without its data partition fails" 1
+expect_reboot yes "  ... and is rebooted like any other failure on trial"
 
 fresh unwritable
 mkdir -p "$(dirname "$RECORD")"; chmod 0555 "$(dirname "$RECORD")"

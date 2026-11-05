@@ -57,6 +57,9 @@
 # 4. Does RAUC work? `rauc status` must name the booted slot. An OS whose RAUC
 #    cannot is one no update can ever replace -- the one regression that turns a bad
 #    update into a reflash.
+# 5. Is the data partition mounted, read-write and writable? microduck-data skips a
+#    missing partition on purpose, so the daemons run on the rootfs's empty
+#    /var/lib/robot and the owner's policies, wifi and pad pairing look gone.
 #
 # Paths can be pointed elsewhere for scripts/test-slot-health.sh.
 set -eu
@@ -74,6 +77,8 @@ BOOT_CHECK=${SLOT_HEALTH_BOOT_CHECK:-/usr/local/sbin/robot-boot-check}
 # On the data partition, so it survives the slot it describes being rewritten.
 RECORD=${SLOT_HEALTH_RECORD:-/var/lib/robot/slot-health/radios}
 CMDLINE=${SLOT_HEALTH_CMDLINE:-/proc/cmdline}
+DATA=${SLOT_HEALTH_DATA:-/var/lib/robot}
+MOUNTS=${SLOT_HEALTH_MOUNTS:-/proc/mounts}
 
 uptime_secs() { cut -d. -f1 "$UPTIME"; }
 
@@ -107,6 +112,18 @@ fi
 
 kernel=$(uname -r)
 [ -d "$MODULES/$kernel" ] || bad="$bad kernel($kernel has no $MODULES/$kernel: not the slot's own kernel)"
+
+# 5. The data partition: the last mount on $DATA wins, as it does for the kernel.
+data_opts=$(awk -v p="$DATA" '$2 == p { o = $4 } END { print o }' "$MOUNTS" 2>/dev/null || true)
+case ",$data_opts," in
+,,) bad="$bad data($DATA is not mounted: the data partition is missing)" ;;
+*,ro,*) bad="$bad data($DATA is mounted read-only)" ;;
+*)
+	probe=$DATA/slot-health/.probe
+	{ mkdir -p "$DATA/slot-health" && : > "$probe" && rm -f "$probe"; } 2>/dev/null ||
+		bad="$bad data(cannot write to $DATA)"
+	;;
+esac
 
 # The radios the kernel has brought up: a wifi interface once the driver has loaded its
 # firmware, an HCI device once Bluetooth is attached. Whether they are associated or
