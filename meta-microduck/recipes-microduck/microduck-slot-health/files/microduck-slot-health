@@ -73,6 +73,8 @@
 #    - the RAUC keyring holds a certificate: without one every bundle is refused;
 #    - the U-Boot environment is readable: apply and switch write BOOT_ORDER
 #      through it;
+#    - the CA bundle is there for check and apply's HTTPS, and timesyncd, which TLS
+#      needs on a board with no RTC, is in 7's list -- running, not synchronised.
 #
 # Reported, never failed: the hardware the robot needs that may simply be unplugged
 # or absent on this board -- the motor bus, the camera, the sound card. A missing
@@ -101,8 +103,9 @@ TAINTED=${SLOT_HEALTH_TAINTED:-/proc/sys/kernel/tainted}
 DEV=${SLOT_HEALTH_DEV:-/dev}
 OSUPDATE=${SLOT_HEALTH_OSUPDATE:-/usr/bin/microduck-osupdate}
 KEYRING=${SLOT_HEALTH_KEYRING:-/usr/lib/rauc/keyring.pem}
+CA_BUNDLE=${SLOT_HEALTH_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}
 # dbus.service is also dbus-broker's alias, so this holds whichever the image runs.
-UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service"
+UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service systemd-timesyncd.service"
 
 uptime_secs() { cut -d. -f1 "$UPTIME"; }
 
@@ -175,6 +178,7 @@ grep -q 'BEGIN CERTIFICATE' "$KEYRING" 2>/dev/null ||
 # environment can be read.
 fw_printenv -n bootcmd >/dev/null 2>&1 ||
 	bad="$bad uboot-env(fw_printenv cannot read the U-Boot environment: apply and switch could not change slots)"
+[ -s "$CA_BUNDLE" ] || bad="$bad ca-bundle(no $CA_BUNDLE: os check and apply could not use HTTPS)"
 
 # Reported, never failed (see the header).
 for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcmC*"; do

@@ -41,4 +41,4 @@ FILES:${PN} += " \
 "
 # rauc-mark-good is only an RRECOMMENDS of rauc, and the drop-in extends its unit.
 # u-boot-fw-utils is fw_printenv/fw_setenv, which microduck-slot-trial calls.
-RDEPENDS:${PN} = "rauc rauc-mark-good systemd u-boot-fw-utils microduck-osupdate"
+RDEPENDS:${PN} = "rauc rauc-mark-good systemd u-boot-fw-utils microduck-osupdate ca-certificates"

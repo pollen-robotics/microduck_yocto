@@ -92,7 +92,7 @@ run() {
 		SLOT_HEALTH_BOOT_CHECK=$BOOT_CHECK SLOT_HEALTH_CMDLINE=$STUB/cmdline \
 		SLOT_HEALTH_DATA=$DATA SLOT_HEALTH_MOUNTS=$STUB/mounts SLOT_HEALTH_TAINTED=$STUB/tainted \
 		SLOT_HEALTH_DEV=$DEVDIR SLOT_HEALTH_OSUPDATE=$OSUPDATE \
-		SLOT_HEALTH_KEYRING=$STUB/keyring.pem \
+		SLOT_HEALTH_KEYRING=$STUB/keyring.pem SLOT_HEALTH_CA_BUNDLE=$STUB/ca-certificates.crt \
 		${TEST_SH:-sh} "$script" 2>&1)
 	got=$?
 	if [ "$got" = "$want" ]; then
@@ -123,10 +123,11 @@ fresh() {
 	echo 0 > "$STUB/tainted"
 	: > "$DEVDIR/ttyS2"; : > "$DEVDIR/video0"; : > "$DEVDIR/snd/pcmC0D0p"
 	# The update path: osupdate's status as the script prints it, a keyring with a
-	# certificate.
+	# certificate, a CA bundle.
 	OSUPDATE=$work/bin/microduck-osupdate
 	echo '{"machine":"microduck-zero3","channel":"dev","production":false,"slot":"A","installed_build":"20261105161953","available":null,"other":null,"builds":[],"phase":"idle","progress":0,"message":"","last_result":""}' > "$STUB/osupdate"
 	printf -- '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n' > "$STUB/keyring.pem"
+	echo "# ca bundle" > "$STUB/ca-certificates.crt"
 }
 # expect_in TEXT NAME: the last run's output says TEXT.
 expect_in() {
@@ -438,6 +439,16 @@ fresh env-unreadable
 rm "$STUB/env/bootcmd"
 run "an unreadable U-Boot environment fails the slot" 1
 expect_in "uboot-env(" "  ... and says why"
+
+fresh no-ca
+rm "$STUB/ca-certificates.crt"
+run "no CA bundle fails the slot" 1
+expect_in "ca-bundle(" "  ... and says why"
+
+fresh no-timesyncd
+echo systemd-timesyncd.service > "$STUB/inactive"
+run "timesyncd not running fails the slot" 1
+expect_in "systemd-timesyncd.service(not active)" "  ... and names it"
 
 # Hardware that may be unplugged: reported, never failed.
 fresh no-devices
