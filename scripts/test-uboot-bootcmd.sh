@@ -58,7 +58,7 @@ work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 	echo '#include <stdio.h>'
 	echo '#include <string.h>'
 	sed -n 's/^+//; /^#define MICRODUCK_RAUC_SELECT/,/rauc\.slot=\${rauc_slot}; "$/p' "$PATCH"
-	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_BOOT/,/_LEFT 0; saveenv; reset; "$/p' "$PATCH"
+	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_BOOT/,/^[[:space:]]*"fi; "$/p' "$PATCH"
 	echo 'int main(int c, char **v){ fputs(c > 1 && !strcmp(v[1], "select") ? MICRODUCK_RAUC_SELECT : MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT, stdout); return 0; }'
 } > "$work/gen.c"
 gcc -o "$work/gen" "$work/gen.c"
@@ -193,8 +193,14 @@ boot_case "B has no kernel: gives up and resets, boots nothing" a-only \
 CMD=$NORESET boot_case "B has no kernel: zeroes and saves B, next boot is A" a-only \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
 	"SAVEENV_CALLED" "RESET_CALLED" "BOOT_ORDER=B A" "BOOT_A_LEFT=3" "BOOT_B_LEFT=0" "!BOOTI_FROM_PART"
-CMD=$NORESET boot_case "no kernel anywhere: gives up on A first" none "" \
+CMD=$NORESET boot_case "no kernel anywhere: gives up on A first" none "setenv BOOT_ORDER 'A B';" \
 	"giving up on slot A" "BOOT_A_LEFT=0" "BOOT_B_LEFT=3" "!BOOTI_FROM_PART"
+# A one-slot order (every board once a trial ends): nothing to reset onto, so it
+# stops -- no zeroing, no second saveenv, no reset -- instead of looping.
+CMD=$NORESET boot_case "A alone in BOOT_ORDER without a kernel: stops, no loop" none "" \
+	"no other slot to boot; stopping" "BOOT_ORDER=A" "BOOT_A_LEFT=0x2" "!RESET_CALLED" "!giving up" "!BOOTI_FROM_PART"
+boot_case "  ... and, as on the board, nothing runs after it" none "" \
+	"no other slot to boot; stopping" "!BOOTI_FROM_PART"
 
 echo "---- $pass passed, $fail failed  (bootcmd ${#BOOTCMD} chars; CONFIG_SYS_CBSIZE does not bound it)"
 [ "$fail" = 0 ]

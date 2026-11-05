@@ -28,15 +28,17 @@ chain is no longer run: a slot whose kernel does not load or boot has its
 counter zeroed and the board resets onto the next slot in BOOT_ORDER. There
 is no `boot` partition kernel to fall back to, since one that does not match
 the slot's modules is worse than no boot.
+With BOOT_ORDER naming that slot alone there is nothing to reset onto, so it
+stops rather than loop, rewriting the environment, until the power is pulled.
 
 Upstream-Status: Inappropriate [microduck RAUC integration]
 ---
- include/configs/evb_rk3568.h | 73 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 72 insertions(+), 1 deletion(-)
+ include/configs/evb_rk3568.h | 82 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 81 insertions(+), 1 deletion(-)
 
 --- a/include/configs/evb_rk3568.h
 +++ b/include/configs/evb_rk3568.h
-@@ -19,8 +19,79 @@
+@@ -19,8 +19,88 @@
  
  #define CONFIG_SYS_MMC_ENV_DEV		0
  
@@ -100,6 +102,11 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 + * boot takes the next slot in BOOT_ORDER -- the same path as a slot that never
 + * reaches rauc-mark-good. Rockchip's own chain (RKIMG_BOOTCOMMAND) is not run: it
 + * would boot a `boot` partition kernel that does not match the slot's modules.
++ *
++ * Unless BOOT_ORDER names this slot alone: there is nothing to reset onto, and
++ * resetting anyway would loop every few seconds, writing the environment each
++ * time, until someone pulls the power. So it stops here instead; a power cycle
++ * tries again, spending one attempt as any boot does.
 + */
 +#define MICRODUCK_ROOTFS_BOOT \
 +	"setenv rauc_partnum 4; " \
@@ -108,8 +115,12 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 +	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${fdt_addr_r} /boot/microduck.dtb; then " \
 +		"echo \"RAUC: kernel from ${rauc_part}\"; booti ${kernel_addr_r} - ${fdt_addr_r}; " \
 +	"fi; " \
-+	"echo \"RAUC: no bootable kernel in ${rauc_part}, giving up on slot ${rauc_slot}\"; " \
-+	"setenv BOOT_${rauc_slot}_LEFT 0; saveenv; reset; "
++	"if test \"x${BOOT_ORDER}\" = \"x${rauc_slot}\"; then " \
++		"echo \"RAUC: no bootable kernel in ${rauc_part} and no other slot to boot; stopping\"; " \
++	"else " \
++		"echo \"RAUC: no bootable kernel in ${rauc_part}, giving up on slot ${rauc_slot}\"; " \
++		"setenv BOOT_${rauc_slot}_LEFT 0; saveenv; reset; " \
++	"fi; "
 +
  #undef CONFIG_BOOTCOMMAND
 -#define CONFIG_BOOTCOMMAND RKIMG_BOOTCOMMAND

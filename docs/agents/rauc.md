@@ -51,8 +51,10 @@ Each rootfs carries `/boot/Image` and `/boot/microduck.dtb` (a symlink to the
 machine's DTB, so one bootcmd serves both boards). After picking the slot,
 U-Boot's script `ext4load`s both from that slot's partition and `booti`s them.
 If they will not load or boot, the script zeroes that slot's counter, saves and
-resets, so the next boot takes the next slot in `BOOT_ORDER` (or, with a one-slot
-order, resets the counters and tries the same slot again). Rockchip's chain is
+resets, so the next boot takes the next slot in `BOOT_ORDER`. With a one-slot
+order there is nothing to reset onto, so it stops at the U-Boot prompt rather than
+loop every few seconds rewriting the environment; a power cycle tries again.
+Rockchip's chain is
 never run. So a bundle carries the kernel, DTB and modules together, and a kernel
 or toolchain change is an ordinary update instead of a reflash. Traps:
 
