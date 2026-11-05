@@ -39,7 +39,8 @@
 #
 # 3. Did this OS lose a radio the previous OS had working? A kernel or driver
 #    regression that drops wifi or Bluetooth leaves a robot nobody can reach, and
-#    question 1 passes it too. Working, not just present (scan_radios). Not "is there a radio": the beta board's has been unreliable, and a board
+#    question 1 passes it too. Working, not just present: NetworkManager can use the
+#    wifi interface, and BlueZ has the adapter powered (scan_radios). Not "is there a radio": the beta board's has been unreliable, and a board
 #    with a dead chip would then fail every boot of every slot and bounce between
 #    them. Instead, each boot that passes records which radios it had and which OS it
 #    was (the slot, and when RAUC wrote it), one line per slot. A *new* OS must have
@@ -189,10 +190,11 @@ for spec in "motor bus:$DEV/ttyS2" "camera:$DEV/video*" "sound card:$DEV/snd/pcm
 		echo "warning: no $name (${spec#*:}): unplugged, or this board has none; reported, not failing the slot"
 done
 
-# The radios that work: a wifi interface NetworkManager can use, and an HCI device
-# once Bluetooth is attached. Present is not enough for wifi -- a wlan0 whose
-# firmware crashed is "unavailable" to NetworkManager. Asked offline: whether the
-# wifi is associated is the network's business, not the OS's.
+# The radios that work: a wifi interface NetworkManager can use, and a Bluetooth
+# adapter BlueZ has powered. Present is not enough -- a wlan0 whose firmware crashed
+# is "unavailable" to NetworkManager, and an hci0 that is not powered cannot
+# advertise, so btd is invisible. Both are asked offline: whether the wifi is
+# associated, or a phone is near, is the room's business, not the OS's.
 # not_working names what is present and not working, for the messages below.
 #
 # NetworkManager's device states: 10 unmanaged and 20 unavailable cannot be used;
@@ -205,6 +207,9 @@ wifi_state() {
 		org.freedesktop.NetworkManager.Device State 2>/dev/null | cut -d' ' -f2)
 	case $state in '' | *[!0-9]*) echo none ;; *) echo "$state" ;; esac
 }
+bt_powered() {
+	[ "$(busctl --system get-property org.bluez "/org/bluez/$1" org.bluez.Adapter1 Powered 2>/dev/null)" = "b true" ]
+}
 scan_radios() {
 	radios=""; not_working=""
 	for dev in "$SYS"/class/net/wlan*; do
@@ -213,7 +218,11 @@ scan_radios() {
 		if [ "$state" != none ] && [ "$state" -ge 30 ]; then radios="wifi"; break; fi
 		not_working="$not_working ${dev##*/}(NetworkManager state $state)"
 	done
-	for dev in "$SYS"/class/bluetooth/hci*; do [ -e "$dev" ] && { radios="${radios:+$radios }bluetooth"; break; }; done
+	for dev in "$SYS"/class/bluetooth/hci*; do
+		[ -e "$dev" ] || continue
+		if bt_powered "${dev##*/}"; then radios="${radios:+$radios }bluetooth"; break; fi
+		not_working="$not_working ${dev##*/}(not powered)"
+	done
 	return 0
 }
 

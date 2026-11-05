@@ -64,13 +64,15 @@ cat > "$work/bin/microduck-osupdate" <<'EOF'
 [ "$*" = status ] || { echo "microduck-osupdate called as: $*" >> "$STUB/forbidden"; exit 99; }
 cat "$STUB/osupdate" 2>/dev/null
 EOF
-# D-Bus, as NetworkManager answers it: wlan0's device state from $STUB/nm-state.
-# A missing file is a service that does not answer.
+# D-Bus, as NetworkManager and BlueZ answer it: wlan0's device state from
+# $STUB/nm-state and hci0's Powered from $STUB/bt-powered. A missing file is a
+# service that does not answer.
 cat > "$work/bin/busctl" <<'EOF'
 #!/bin/sh
 case "$*" in
 *"GetDeviceByIpIface s wlan0") [ -f "$STUB/nm-state" ] && echo 'o "/org/freedesktop/NetworkManager/Devices/3"' ;;
 *"Devices/3 org.freedesktop.NetworkManager.Device State") [ -f "$STUB/nm-state" ] && echo "u $(cat "$STUB/nm-state")" ;;
+*"/org/bluez/hci0 org.bluez.Adapter1 Powered") [ -f "$STUB/bt-powered" ] && echo "b $(cat "$STUB/bt-powered")" ;;
 *) echo "busctl called as: $*" >&2; exit 99 ;;
 esac
 EOF
@@ -132,8 +134,9 @@ fresh() {
 	printf '/dev/root / ext4 rw,relatime 0 0\n/dev/mmcblk1p6 %s ext4 rw,relatime 0 0\n' "$DATA" > "$STUB/mounts"
 	echo 0 > "$STUB/tainted"
 	: > "$DEVDIR/ttyS2"; : > "$DEVDIR/video0"; : > "$DEVDIR/snd/pcmC0D0p"
-	# wifi working: NetworkManager has wlan0 disconnected (usable, no AP needed).
-	echo 30 > "$STUB/nm-state"
+	# Both radios working: NetworkManager has wlan0 disconnected (usable, no AP
+	# needed) and BlueZ has hci0 powered.
+	echo 30 > "$STUB/nm-state"; echo true > "$STUB/bt-powered"
 	# The update path: osupdate's status as the script prints it, a keyring with a
 	# certificate, a CA bundle.
 	OSUPDATE=$work/bin/microduck-osupdate
@@ -444,11 +447,29 @@ run "wifi disconnected (no network around) still counts as working" 0
 grep -qx 'A@ wifi bluetooth' "$RECORD" ||
 	{ fail=$((fail + 1)); echo "FAIL a disconnected wifi is recorded as working"; }
 
+fresh bt-unpowered
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; echo false > "$STUB/bt-powered"
+run "an update whose Bluetooth adapter is not powered fails" 1
+expect_in "hci0(not powered)" "  ... and says why"
+
+fresh bt-bluez-silent
+run "flashed A passes" 0
+slot B "2026-10-28T10:00:00Z"; rm "$STUB/bt-powered"
+run "an update where BlueZ does not answer fails" 1
+
 fresh same-os-wifi-dies
 run "flashed A passes" 0
 echo 20 > "$STUB/nm-state"
 run "the same OS with wifi now unavailable passes: hardware, not an update" 0
 expect_in "warning: wifi worked on an earlier boot of this same OS" "  ... and is reported"
+
+fresh never-powered
+echo false > "$STUB/bt-powered"
+run "a board whose Bluetooth never powered passes, recorded without it" 0
+grep -qx 'A@ wifi' "$RECORD" || { fail=$((fail + 1)); echo "FAIL recorded without Bluetooth"; }
+slot B "2026-10-28T10:00:00Z"
+run "and its update is held only to wifi" 0
 
 # The next OS update, offline.
 fresh os-status-ok
