@@ -27,15 +27,17 @@ BASE_URL=https://huggingface.co/buckets/pollen-robotics/microduck-os/resolve
 # production-signed bundles, and only stable carries those.
 production() { [ ! -e /usr/lib/rauc/ca-dev.cert.pem ]; }
 if production; then CHANNEL=stable; else CHANNEL=dev; fi
+MIN_BATTERY_PCT=30
 # Root-owned local configuration, so sourcing it is fine (unlike the manifest).
 [ ! -r /etc/microduck-osupdate.conf ] || . /etc/microduck-osupdate.conf
 # Overridable for scripts/test-osupdate-boot-report.sh only.
 STATE=${MICRODUCK_OSUPDATE_STATE:-/var/lib/robot/osupdate}
 mkdir -p "$STATE"
 
-say() { printf '%s\n' "$*" > "$STATE/message"; echo "$*" >&2; }
+# The message is a failure until the next say: "failed" in status, which the page shows as a warning.
+say() { printf '%s\n' "$*" > "$STATE/message"; rm -f "$STATE/failed"; echo "$*" >&2; }
 phase() { printf '%s\n' "$1" > "$STATE/phase"; }
-fail() { say "$*"; phase idle; exit 1; }
+fail() { say "$*"; : > "$STATE/failed"; phase idle; exit 1; }
 matches() { printf '%s' "$1" | grep -Eqx -- "$2"; }
 
 # status reads it seven times and the page polls status, so status sets RAUC_JSON
@@ -88,6 +90,22 @@ other_good() {
 		grep -qx "$(other_name)@$(other_installed)" "$GOOD_RECORD" 2>/dev/null
 }
 
+# No fuel gauge: robotd reads the pack through the servos' supply (robotctl health).
+# A dying pack mid-install costs the update, not the board (RAUC writes the other
+# slot), but we would rather not start one. No reading -- servos off or not answering
+# -- refuses nothing; nor does a rail under 6 V, which is a bench supply rather than
+# the 2S pack (robotd powers the robot off at 6.6 V). Same 30% that clients call low
+# (duck-ipc-proto's Battery::LOW_PCT).
+battery_ok() {
+	set -- $(robotctl health --json 2>/dev/null | awk -F: '
+		/"battery": *\{/ { b = 1; next }
+		b && /"volts"/ { v = $2 + 0 }
+		b && /"percent"/ { p = $2 + 0 }
+		b && /\}/ { print int(v * 10), int(p); exit }')
+	BATTERY_PCT=${2:-}
+	[ -z "$BATTERY_PCT" ] || [ "$1" -lt 60 ] || [ "$BATTERY_PCT" -ge "$MIN_BATTERY_PCT" ]
+}
+
 # field FILE KEY: the first KEY= line's value.
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 
@@ -132,7 +150,14 @@ check() {
 	board_machine
 	load_index
 	load_manifest "$CHANNEL.env" "$STATE/available.env"
-	say "checked $CHANNEL: $(field "$STATE/available.env" VERSION)"
+	v=$(field "$STATE/available.env" VERSION); b=$(field "$STATE/available.env" BUILD)
+	i=$(installed_build)
+	# Build ids are UTC timestamps; a flashed slot without one counts as older.
+	if [ -n "$i" ] && [ "$b" -le "$i" ]; then
+		say "The newest $CHANNEL build is $v, so there is nothing to install."
+	else
+		say "Update available on the $CHANNEL channel: $v."
+	fi
 }
 
 # updaterd takes this lock to install, roll back or select a daemon release, and
@@ -151,7 +176,7 @@ apply() {
 	exec 9> "$STATE/lock"
 	flock -n 9 || fail "an update is already running"
 	daemon_lock
-	phase checking
+	phase checking; say "Preparing the update…"
 	board_machine
 	if [ -n "${1:-}" ]; then
 		matches "$1" '[0-9]{14}' || fail "bad build id"
@@ -174,6 +199,8 @@ apply() {
 	if [ "$build" = "$(other_build)" ] && other_good; then
 		switch_slot "$version"
 	fi
+
+	battery_ok || fail "Battery at $BATTERY_PCT%: charge the robot above $MIN_BATTERY_PCT% before updating."
 
 	# On the data partition: 7 GiB free, where the 2 GiB rootfs has ~1.
 	phase downloading; say "downloading $version"
@@ -316,10 +343,11 @@ status() {
 	# The index lines passed load_index's pattern, so they hold no quote to escape.
 	builds=$(awk '{printf "%s{\"channel\":\"%s\",\"build\":\"%s\",\"version\":\"%s\"}", (NR > 1 ? "," : ""), $1, $2, $3}' "$STATE/index.txt" 2>/dev/null || true)
 	prod=false; production && prod=true
-	printf '{"machine":%s,"channel":%s,"production":%s,"slot":%s,"installed_build":%s,"available":%s,"other":%s,"builds":[%s],"phase":%s,"progress":%d,"message":%s,"last_result":%s}\n' \
+	failed=false; [ ! -e "$STATE/failed" ] || failed=true
+	printf '{"machine":%s,"channel":%s,"production":%s,"slot":%s,"installed_build":%s,"available":%s,"other":%s,"builds":[%s],"phase":%s,"progress":%d,"message":%s,"failed":%s,"last_result":%s}\n' \
 		"$(jstr "$(machine)")" "$(jstr "$CHANNEL")" "$prod" "$(jstr "$(booted_name)")" \
 		"$(jstr "$(installed_build)")" "$avail" "$other" "$builds" "$(jstr "$ph")" "$progress" \
-		"$(jstr "$(cat "$STATE/message" 2>/dev/null || true)")" \
+		"$(jstr "$(cat "$STATE/message" 2>/dev/null || true)")" "$failed" \
 		"$(jstr "$(cat "$STATE/result" 2>/dev/null || true)")"
 }
 

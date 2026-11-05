@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 const page = new URL("../meta-microduck/recipes-microduck/microduck-osupdate/files/index.html", import.meta.url);
 const html = readFileSync(page, "utf8");
 const src = html.slice(html.indexOf("const shipping"), html.indexOf("// The list, grouped"));
-const { installable, installPrompt } = new Function(src + "; return { installable, installPrompt };")();
+const { installable, installPrompt, latest } = new Function(src + "; return { installable, installPrompt, latest };")();
 
 const builds = [
   { channel: "dev", build: "20261029140209", version: "0.1.0-20261029140209" },
@@ -56,5 +56,21 @@ assert.ok(!warns(find("1.0.1"), { ...prod, other: { slot: "A", build: "202610301
 
 // A production board flashed before BUILD_ID: no installed build, every stable shown.
 assert.deepEqual(shown({ ...prod, installed_build: "" }), ["1.0.0", "1.0.1"]);
+
+// The "Update to" button: the channel's newest, only when it is newer and of this
+// board's own channel (available.env may be the other slot's, from the shared data
+// partition).
+const avail = (v) => ({ available: { build: find(v).build, version: v } });
+const ver = (s) => (latest(s) || {}).version || null;
+const prodS = { ...prod, channel: "stable" }, devS = { ...dev, channel: "dev" };
+assert.equal(ver({ ...prodS, ...avail("1.0.1") }), "1.0.1");
+assert.equal(ver({ ...prodS, ...avail("1.0.1"), installed_build: find("1.0.1").build }), null, "already running");
+assert.equal(ver({ ...prodS, ...avail("1.0.1"), installed_build: "" }), "1.0.1", "a flashed board updates");
+assert.equal(ver({ ...prodS, available: null }), null, "never checked");
+assert.equal(ver({ ...prodS, available: { build: "20991231000000", version: "9" } }), null, "not in the index");
+assert.equal(ver({ ...devS, installed_build: find("1.0.0").build, ...avail("1.0.1") }), null, "stable on a dev board is the other slot's, and one-way");
+assert.equal(ver({ ...devS, installed_build: find("0.1.0-20261029170630").build, ...avail("1.0.1+20261030102609") }),
+  "1.0.1+20261030102609");
+assert.equal(ver({ ...devS, ...avail("0.1.0-20261029170630") }), null, "older than the running dev build");
 
 console.log("osupdate page: ok");

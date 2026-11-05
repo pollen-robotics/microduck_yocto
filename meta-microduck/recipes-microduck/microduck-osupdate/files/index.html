@@ -5,48 +5,96 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>microduck · OS update</title>
 <style>
-  body { font: 16px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; color: #222; }
-  h1 { font-size: 1.4rem; }
-  h2 { font-size: 1.05rem; margin-top: 1.6rem; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
-  dt { color: #666; }
-  dd { margin: 0; font-variant-numeric: tabular-nums; }
-  button, select { font: inherit; padding: .4rem .8rem; }
+  /* Served by the robot itself, which may have no route to a CDN: system fonts only. */
+  :root {
+    --paper: #f7f8fa; --card: #fff; --ink: #1c2230; --muted: #5b6475; --rule: #d5d9e0;
+    --duck: #f2c230; --duck-ink: #2a2000; --focus: #2b6cdf;
+  }
+  body {
+    font: 16px/1.5 system-ui, sans-serif; background: var(--paper); color: var(--ink);
+    max-width: 40rem; margin: 2.5rem auto; padding: 0 1.25rem;
+    font-variant-numeric: tabular-nums;
+  }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem 1rem; flex-wrap: wrap; }
+  h1 { font-size: 1.25rem; margin: 0; }
+  h2 { font-size: 1.05rem; margin: 2.25rem 0 .75rem; }
+  .muted { color: var(--muted); }
+  .running { font-size: 2rem; font-weight: 650; line-height: 1.15; margin: 1.75rem 0 .25rem; overflow-wrap: anywhere; }
+  button, select { font: inherit; padding: .45rem .9rem; border: 1px solid var(--rule); border-radius: .4rem; background: var(--card); color: var(--ink); }
+  button:not(:disabled) { cursor: pointer; }
+  button:disabled { color: var(--muted); background: #eceef2; }
+  #update { margin-top: 1.25rem; padding: .7rem 1.3rem; font-weight: 600; border: 0; background: var(--duck); color: var(--duck-ink); }
+  #update:disabled { background: #e3e6eb; color: var(--muted); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  progress { width: 100%; height: .75rem; margin-top: 1rem; accent-color: var(--ink); }
+  #msg { min-height: 1.5em; margin: .5rem 0 0; }
+  /* A refusal or a failed update: what to do about it has to be seen, not skimmed. */
+  #msg.warn { background: #fff4d1; border-left: 4px solid var(--duck); color: var(--duck-ink); padding: .6rem .8rem; border-radius: 0 .4rem .4rem 0; }
+  .note { color: var(--muted); font-size: .9rem; max-width: 34rem; }
+  /* The two slots side by side: the booted one solid, the one an install would write dashed. */
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; align-items: start; }
+  .slot { background: var(--card); border: 1px solid var(--rule); border-radius: .5rem; padding: .9rem 1rem; }
+  .slot.booted { border: 2px solid var(--ink); }
+  .slot.other { border-style: dashed; border-width: 2px; }
+  .slot h3 { font-size: 1rem; margin: 0 0 .4rem; display: flex; justify-content: space-between; gap: .5rem; }
+  .slot h3 .tag { font-weight: 400; color: var(--muted); }
+  .slot p { margin: 0 0 .2rem; overflow-wrap: anywhere; }
+  .slot .build { font-weight: 600; }
+  .slot button { margin-top: .6rem; }
+  details { margin-top: 1.5rem; }
+  summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: .75rem; }
   select { width: 100%; margin: .3rem 0 .6rem; }
-  progress { width: 100%; height: 1rem; }
-  #msg { min-height: 1.5em; }
-  .note { color: #666; font-size: .9rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  @media (max-width: 32rem) {
+    body { margin-top: 1.5rem; }
+    .slots { grid-template-columns: 1fr; }
+    .running { font-size: 1.6rem; }
+  }
 </style>
 </head>
 <body>
-<h1>OS update</h1>
-<dl>
-  <dt>Board</dt><dd id="machine">…</dd>
-  <dt>Running</dt><dd id="installed">…</dd>
-  <dt>State</dt><dd id="phase">…</dd>
-  <dt>Last update</dt><dd id="result">…</dd>
-</dl>
-<p><progress id="progress" max="100" value="0" hidden></progress></p>
-<p id="msg" role="status" aria-live="polite"></p>
+<header>
+  <h1>OS update</h1>
+  <span class="muted" id="machine">…</span>
+</header>
 
-<h2>Install a build</h2>
-<label for="builds">Published builds (channel <span id="channel">…</span>)</label>
+<p class="running" id="installed">…</p>
+<p class="muted">On slot <span class="rname">A</span>, <span id="phase">…</span></p>
+<button id="update" disabled>Checking…</button>
+<progress id="progress" max="100" value="0" hidden></progress>
+<p id="msg" role="status" aria-live="polite"></p>
+<p class="note">An update installs on slot <span class="oname">B</span> while this one keeps
+running, then restarts the robot into it. If it does not come up healthy, the robot
+goes back to slot <span class="rname">A</span> by itself.</p>
+<p class="note">Last update: <span id="result">…</span></p>
+
+<h2>Slots</h2>
+<div class="slots">
+  <section class="slot booted" aria-labelledby="h-booted">
+    <h3 id="h-booted"><span>Slot <span class="rname">A</span></span><span class="tag">running</span></h3>
+    <p class="build" id="rbuild">…</p>
+  </section>
+  <section class="slot other" aria-labelledby="h-other">
+    <h3 id="h-other"><span>Slot <span class="oname">B</span></span><span class="tag">standby</span></h3>
+    <p class="build" id="obuild">…</p>
+    <p class="muted" id="ostate">…</p>
+    <button id="switch" disabled>Boot slot <span class="oname">B</span></button>
+  </section>
+</div>
+<p class="note">Booting slot <span class="oname">B</span> restarts the robot into what it already
+holds, with nothing to download: the way back after an update.</p>
+
+<details>
+<summary>Install a build on slot <span class="oname">B</span></summary>
+<label for="builds">Published builds. This board follows the <strong id="channel">…</strong> channel.</label>
 <select id="builds"><option>Check for updates to list them</option></select>
 <p id="hidden" class="note"></p>
-<p>
+<div class="actions">
+  <button id="install" disabled>Install on slot <span class="oname">B</span></button>
   <button id="check">Check for updates</button>
-  <button id="install" disabled>Install selected</button>
-</p>
-
-<h2>Other slot</h2>
-<dl>
-  <dt>Slot</dt><dd id="oslot">…</dd>
-  <dt>Holds</dt><dd id="obuild">…</dd>
-</dl>
-<p><button id="switch" disabled>Boot it</button></p>
-<p class="note">Installing writes the other slot and reboots into it; "Boot it" reboots
-into what that slot already holds, with no download. Either way the robot goes back
-by itself if the new system does not come up healthy.</p>
+</div>
+</details>
 <script>
 const $ = (id) => document.getElementById(id);
 let last = null, listed = "";
@@ -70,7 +118,9 @@ function label(b, s) {
 function named(build, s) {
   if (!build) return "the flashed image";
   const b = s.builds.find((x) => x.build === build);
-  return b ? b.version + " (" + build + ")" : build;
+  if (!b) return "Build " + build;
+  // A dev version already carries its build: "1.1.0+20261105090625".
+  return b.version.includes(build) ? b.version : b.version + " (" + build + ")";
 }
 
 // candidate and stable carry the shipping image, whose keyring trusts the
@@ -99,6 +149,15 @@ function installPrompt(b, s) {
       " dev afterwards is reflashing the card.";
   }
   return t;
+}
+
+// The board's channel's newest build when it is newer than the one running, else null.
+// available.env is on the shared data partition, so it may be the other slot's channel
+// (a stable check from a dev board's other slot): only this slot's channel counts.
+function latest(s) {
+  const a = s.available && s.builds.find((x) => x.build === s.available.build);
+  return a && a.channel === s.channel && installable(a, s) &&
+    !(s.installed_build && a.build <= s.installed_build) ? a : null;
 }
 
 // The list, grouped by channel, newest first; the channel's newest is "latest".
@@ -139,34 +198,51 @@ function show(s) {
   const busy = s.phase !== "idle";
   $("machine").textContent = s.machine || "?";
   $("channel").textContent = s.channel;
-  $("installed").textContent = named(s.installed_build, s) + " (slot " + s.slot + ")";
-  $("phase").textContent = s.phase;
+  $("installed").textContent = named(s.installed_build, s);
+  $("rbuild").textContent = named(s.installed_build, s);
+  $("phase").textContent = PHASES[s.phase] || s.phase;
   $("result").textContent = s.last_result || "—";
   $("msg").textContent = s.message || "";
+  $("msg").classList.toggle("warn", !!s.failed);
   $("progress").hidden = s.phase !== "downloading";
   $("progress").value = s.progress;
   fillBuilds(s);
   const chosen = $("builds").value;
   $("install").disabled = busy || !/^[0-9]{14}$/.test(chosen) || chosen === s.installed_build;
   $("check").disabled = busy;
+  const l = latest(s);
+  // Always shown, greyed when there is nothing to install, so "no button" never has to
+  // be read as "up to date".
+  $("update").disabled = busy || !l;
+  $("update").textContent = l ? "Update to " + l.version : s.available ? "Up to date" : "No update information";
   const o = s.other || {};
-  $("oslot").textContent = o.slot || "?";
-  $("obuild").textContent = named(o.build, s) +
-    (o.installed ? ", installed " + o.installed : "") + (o.good ? " — good" : " — not marked good");
+  for (const e of document.querySelectorAll(".rname")) e.textContent = s.slot || "?";
+  for (const e of document.querySelectorAll(".oname")) e.textContent = o.slot || "?";
+  $("obuild").textContent = named(o.build, s);
+  $("ostate").textContent = (o.good ? "Started healthy" : "Not marked healthy, so it cannot be booted") +
+    (o.installed ? ". Installed " + o.installed.slice(0, 10) + "." : ".");
   $("switch").disabled = busy || !o.good;
 }
+
+const PHASES = { idle: "idle", checking: "checking for updates", downloading: "downloading",
+  installing: "installing", rebooting: "restarting" };
 
 async function poll() {
   try { show(await call("GET", "/api/status")); }
   catch (e) {
     // While it reboots the board is unreachable: keep trying until it is back.
     $("msg").textContent = last && last.phase === "rebooting"
-      ? "Rebooting… this page reconnects by itself." : "Robot unreachable (" + e.message + ")";
+      ? "Restarting… this page reconnects by itself." : "Robot unreachable (" + e.message + ")";
   }
   // Each poll is a process on the robot: fast only while something is happening.
   setTimeout(poll, last && last.phase === "idle" ? 10000 : 2000);
 }
 
+$("update").onclick = async () => {
+  const b = latest(last);
+  if (!b || !confirm(installPrompt(b, last))) return;
+  show(await call("POST", "/api/apply?build=" + encodeURIComponent(b.build)));
+};
 $("builds").onchange = () => last && show(last);
 $("check").onclick = async () => { $("msg").textContent = "Checking…"; show(await call("POST", "/api/check")); };
 $("install").onclick = async () => {
@@ -175,10 +251,19 @@ $("install").onclick = async () => {
   show(await call("POST", "/api/apply?build=" + encodeURIComponent(b.build)));
 };
 $("switch").onclick = async () => {
-  if (!confirm("Reboot into slot " + last.other.slot + " (" + (last.other.build || "the flashed image") + ")?")) return;
+  if (!confirm("Restart the robot into slot " + last.other.slot + " (" + named(last.other.build, last) + ")?")) return;
   show(await call("POST", "/api/switch"));
 };
-poll();
+// Check on load, so the button reflects what is published now -- but not mid-update,
+// where the script's message is the update's progress.
+(async () => {
+  try {
+    const s = await call("GET", "/api/status");
+    show(s);
+    if (s.phase === "idle") { $("msg").textContent = "Checking for updates…"; show(await call("POST", "/api/check")); }
+  } catch (e) { /* poll says the robot is unreachable */ }
+  poll();
+})();
 </script>
 </body>
 </html>
