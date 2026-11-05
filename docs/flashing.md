@@ -148,8 +148,8 @@ scripts/flash-emmc.sh microduck-os-v1.0.1
 Without a tag it takes the latest release. Before downloading anything it
 shows the release and image it is about to write and asks for confirmation
 (`FLASH_EMMC_YES=1` skips the question). The files stay in
-`~/microduck-flash/<tag>`, so for the next robot just run it again and put
-the robot in flashing mode. Power-cycling at the end is still up to you.
+`~/.cache/microduck-flash/<tag>` (set `FLASH_DIR` for another place), so for
+the next robot just run it again and put the robot in flashing mode. Power-cycling at the end is still up to you.
 
 It flashes the face board V1.0 unless told otherwise; for the beta board, name
 the board after the release (or after `release`, for the latest one):

@@ -18,9 +18,10 @@
 #
 # flash and recover show what they are about to write and ask first;
 # FLASH_EMMC_YES=1 skips the question. Files are downloaded once, into
-# $FLASH_DIR/<tag or folder> (default ~/microduck-flash). A release's image is
-# kept decompressed there, so the next robot is just another run; a dev build's
-# is deleted after writing, as the next dev flash is usually a newer build.
+# $FLASH_DIR/<tag or folder>, by default the user cache dir:
+# $XDG_CACHE_HOME/microduck-flash, i.e. ~/.cache/microduck-flash. A release's
+# image is kept decompressed there, so the next robot is just another run; a
+# dev build's is deleted after writing, as the next dev flash is usually newer.
 #
 # recover is for a board stuck in maskrom whose eMMC already carries our image:
 # it replaces the DRAM init without a reflash (docs/agents/beta-board.md, "A
@@ -36,12 +37,12 @@ set -euo pipefail
 
 REPO=pollen-robotics/microduck_yocto
 BUCKET=hf://buckets/pollen-robotics/microduck-yocto-cache/deploy
-FLASH_DIR=${FLASH_DIR:-$HOME/microduck-flash}
+FLASH_DIR=${FLASH_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/microduck-flash}
 
 die() { echo "error: $*" >&2; exit 1; }
 say() { echo "==> $*" >&2; }
 
-usage() { sed -n '2,34s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,35s/^# \{0,1\}//p' "$0"; }
 
 # rkdeveloptool needs root on Linux (no udev rule), not on macOS.
 rkdt() {
