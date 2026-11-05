@@ -62,6 +62,9 @@
 #    /var/lib/robot and the owner's policies, wifi and pad pairing look gone.
 # 6. Did the kernel oops during this boot? The D bit of /proc/sys/kernel/tainted.
 #    Not W: the vendor BSP warns on every boot.
+# 7. Are the OS services a robot is reached through running? A fixed list, not "any
+#    failed unit": a unit allowed to fail (microduck-voice-bank) must not roll back
+#    a good OS.
 #
 # Paths can be pointed elsewhere for scripts/test-slot-health.sh.
 set -eu
@@ -82,6 +85,8 @@ CMDLINE=${SLOT_HEALTH_CMDLINE:-/proc/cmdline}
 DATA=${SLOT_HEALTH_DATA:-/var/lib/robot}
 MOUNTS=${SLOT_HEALTH_MOUNTS:-/proc/mounts}
 TAINTED=${SLOT_HEALTH_TAINTED:-/proc/sys/kernel/tainted}
+# dbus.service is also dbus-broker's alias, so this holds whichever the image runs.
+UNITS="dbus.service systemd-journald.service NetworkManager.service bluetooth.service"
 
 uptime_secs() { cut -d. -f1 "$UPTIME"; }
 
@@ -132,6 +137,11 @@ case ",$data_opts," in
 		bad="$bad data(cannot write to $DATA)"
 	;;
 esac
+
+# 7. The services a robot is reached and debugged through.
+for unit in $UNITS; do
+	systemctl is-active --quiet "$unit" || bad="$bad $unit(not active)"
+done
 
 # The radios the kernel has brought up: a wifi interface once the driver has loaded its
 # firmware, an HCI device once Bluetooth is attached. Whether they are associated or

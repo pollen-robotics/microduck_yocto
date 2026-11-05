@@ -56,9 +56,15 @@ cat > "$work/bin/fw_printenv" <<'EOF'
 [ "$1" = -n ] || { echo "fw_printenv called as: $*"; exit 99; }
 cat "$STUB/env/$2" 2>/dev/null
 EOF
-# Records what it was asked, so a case can tell whether the board would reboot.
+# `is-active --quiet UNIT` fails for a unit listed in $STUB/inactive. Anything else
+# is recorded, so a case can tell whether the board would reboot.
 cat > "$work/bin/systemctl" <<'EOF'
 #!/bin/sh
+if [ "$1" = is-active ]; then
+	[ "$2" = --quiet ] || { echo "systemctl called as: $*"; exit 99; }
+	! grep -qx "$3" "$STUB/inactive" 2>/dev/null
+	exit
+fi
 echo "$*" >> "$STUB/systemctl"
 EOF
 chmod +x "$work/bin/"*
@@ -356,6 +362,16 @@ run "warnings and out-of-tree modules alone pass" 0
 fresh taint-garbage
 echo nonsense > "$STUB/tainted"
 run "an unreadable taint reads as clean" 0
+
+# The OS services.
+fresh nm-down
+echo NetworkManager.service > "$STUB/inactive"
+run "NetworkManager not running fails the slot" 1
+expect_in "NetworkManager.service(not active)" "  ... and names it"
+
+fresh bt-down
+echo bluetooth.service > "$STUB/inactive"
+run "bluetooth.service not running fails the slot" 1
 
 fresh trial-data-fails
 slot B "2026-10-28T10:00:00Z"; uboot B "B A" 3 3
