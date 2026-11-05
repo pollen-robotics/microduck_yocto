@@ -230,8 +230,8 @@ Three recipe constraints, all load-bearing:
   they ask for: they are POSIX shell and fetch with `curl`, which the daemon
   recipe therefore pulls in.
 
-And two **paths** that the image now depends on, so a daemon change that moves
-either breaks A/B without touching a single Yocto file:
+And three **paths** that the image now depends on, so a daemon change that moves
+any of them breaks A/B without touching a single Yocto file:
 
 - `/var/lib/robot` is a **mount point** for the persistent `data` partition.
   Everything a user adds — `POLICY_LIBRARY`, the sound bank,
@@ -242,6 +242,12 @@ either breaks A/B without touching a single Yocto file:
   by the image, reseeded on flash, converged by `updaterd`. Do not move it to
   `/var/lib/robot` to "make it persist" — that would let a slot switch and a
   daemon update disagree about which release is installed.
+- `/var/lib/robot/updater/update.lock` is the lock `updaterd` holds for a
+  daemon install, rollback or select, from download to health check, and
+  `microduck-osupdate` holds it through an OS update until it asks for the
+  reboot. The directory is `state_dir` in the daemon's `deploy/updater.toml`.
+  It has to stay a `flock` there: an `fcntl` lock does not conflict with one,
+  so the two would quietly overlap again.
 
 Also: the daemon recipe has **no version of its own** (README.md, "Which daemon
 the image seeds"), and `SRCREV_daemon` is still a **release** commit, never
