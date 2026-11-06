@@ -32,11 +32,10 @@
 #    older one exits 0 either way.
 #
 # 2. Does the running kernel have its modules? A bundle carries kernel and modules
-#    together in the slot. A card flashed before the `boot` partition went still has
-#    a U-Boot that falls back to that partition's kernel when the slot's /boot/Image
-#    does not load -- an old kernel under the new slot's modules, which loads no wifi
-#    driver. The daemons wait for missing hardware by design, so question 1 passes
-#    that boot; this one does not.
+#    together in the slot, and U-Boot falls back to the kernel in the `boot` partition
+#    when the slot's /boot/Image does not load -- an old kernel under the new slot's
+#    modules, which loads no wifi driver. The daemons wait for missing hardware by
+#    design, so question 1 passes that boot; this one does not.
 #
 # 3. Did this OS lose a radio the previous OS had working? A kernel or driver
 #    regression that drops wifi or Bluetooth leaves a robot nobody can reach, and

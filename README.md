@@ -226,10 +226,11 @@ fixed offsets there without reading the GPT:
 | 1 | `v_storage` | 3.5 MiB | 256 KiB | Rockchip vendor storage: MAC, serial |
 | 2 | `uboot_env` | 0x3F8000 | 32 KiB | U-Boot environment: slot order and retry counters |
 | 3 | `uboot` | 8 MiB | 4 MiB | `uboot.img` |
-| — | *(unallocated)* | 16 MiB | 64 MiB | kept free: was `boot` and `boot_b` |
-| 4 | `rootfs_a` | 80 MiB | 2 GiB | slot A, kernel included |
-| 5 | `rootfs_b` | 2128 MiB | 2 GiB | slot B, kernel included |
-| 6 | `data` | 4176 MiB | 8 GiB | `/var/lib/robot`: policies, sounds, config, wifi |
+| 4 | `boot` | 16 MiB | 32 MiB | fallback kernel and device tree |
+| 5 | `boot_b` | 48 MiB | 32 MiB | reserved |
+| 6 | `rootfs_a` | 80 MiB | 2 GiB | slot A, kernel included |
+| 7 | `rootfs_b` | 2128 MiB | 2 GiB | slot B |
+| 8 | `data` | 4176 MiB | 8 GiB | `/var/lib/robot`: policies, sounds, config, wifi |
 
 [`docs/agents/rauc.md`](docs/agents/rauc.md) has the update design and its
 traps.
