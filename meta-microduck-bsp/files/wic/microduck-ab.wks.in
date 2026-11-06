@@ -7,7 +7,8 @@
 #   v_storage    3584 KiB     256 KiB   Rockchip vendor storage (MAC, serial)
 #   uboot_env    4064 KiB      32 KiB   = 0x3F8000, the default environment
 #   uboot           8 MiB       4 MiB
-#   (unallocated)  16 MiB      64 MiB   was boot + boot_b; kept free, see below
+#   boot           16 MiB      32 MiB   fallback kernel + DTB; each slot has its own
+#   boot_b         48 MiB      32 MiB   reserved, empty
 #   rootfs_a       80 MiB       2 GiB
 #   rootfs_b     2128 MiB       2 GiB   same rootfs as A; RAUC rewrites it
 #   data         4176 MiB       8 GiB   /var/lib/robot, survives updates
@@ -20,7 +21,7 @@
 # Every partition has an explicit --offset and --fixed-size, so wic fails rather
 # than shifts: a bundle built against one layout must never write into another.
 # Partitions are addressed by label everywhere but one: U-Boot's ext4load names
-# rootfs_a and rootfs_b by number, 4 and 5 (this U-Boot has no `part number`), and
+# rootfs_a and rootfs_b by number, 6 and 7 (this U-Boot has no `part number`), and
 # scripts/check-wks-layout.py asserts it. One line per part: wic's parser has no
 # line continuation.
 
@@ -40,11 +41,11 @@ part --source rawcopy --sourceparams="file=u-boot-initial-env.bin" --offset 8128
 
 part --source rawcopy --sourceparams="file=uboot.img" --offset 8M --fixed-size 4M --part-name uboot
 
-# No `boot` partition: U-Boot boots only the kernel and DTB in the chosen slot's
-# /boot, and a slot without them is given up on (the U-Boot patch). A fallback
-# kernel there would not match the slot's modules. 16..80 MiB stays unallocated rather than moving the rootfs up: it keeps
-# every later offset where it was, and leaves room for a bootloader or boot
-# region later without another shift.
+# The fallback: U-Boot boots the kernel and DTB in the chosen slot's /boot, and only
+# a slot without them (written before that) takes this one. Named `boot`, not
+# `boot_a`: vendor U-Boot looks it up by that exact GPT name.
+part --source rawcopy --sourceparams="file=boot.img" --offset 16M --fixed-size 32M --part-name boot
+part --offset 48M --fixed-size 32M --fstype=none --part-name boot_b
 
 # The kernel's root= comes from U-Boot's boot script (root=PARTLABEL=rootfs_a|b).
 # The fixed GUIDs only keep two builds of one commit byte-identical.
@@ -52,11 +53,10 @@ part / --source rootfs --offset 80M --fixed-size 2048M --fstype=ext4 --part-name
 #
 # rootfs_b gets the same rootfs as rootfs_a, so a freshly flashed board has two
 # bootable slots. U-Boot's script falls back to B once A has used its attempts
-# (three boots without rauc-mark-good, e.g. three quick reboots). With B empty it
-# used to fall back to the `boot` partition, whose kernel panicked on an empty
-# root -- the board looked bricked until the counters wrapped (first beta board,
-# 2026-10-06). Without that partition an empty B is skipped, but a fresh board
-# should still have two slots that boot. Costs one more 2 GiB write at flash time.
+# (three boots without rauc-mark-good, e.g. three quick reboots); with B empty
+# U-Boot finds no kernel there, falls back to `boot`, and that kernel panics on an
+# empty root -- the board looks bricked until the counters wrap. Seen on the first
+# beta board, 2026-10-06. Costs one more 2 GiB write at flash time.
 part --source rootfs --offset 2128M --fixed-size 2048M --fstype=ext4 --part-name rootfs_b --uuid 614e0001-0000-4b53-8000-1d28000054a9 --mkfs-extraopts "${RK_ROOTFS_EXTRAOPTS}"
 
 # User data: policies, sounds, configd state, wifi profiles. Seeded from the image's

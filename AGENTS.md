@@ -55,14 +55,19 @@ you didn't look. This repo already has a scar for each:
 - meta-rockchip's `wrynose` branch does not always match oe-core's `wrynose` tip.
   It has been wrong twice: the `xserver-xorg` fork tag, and the above. Treat it as
   the least trustworthy layer here.
-- **Vendor U-Boot's own chain finds a kernel by GPT partition *name*, and the
-  name is `boot`.** Its environment carries `name=boot,size=32M,bootable` and a
-  `bootcmd` of `boot_android ...;boot_fit;bootrkp;run distro_bootcmd;`. Renaming
-  that partition once gave a card that flashed perfectly, verified perfectly, and
-  never loaded a kernel — no wifi, no BLE, looks dead. Our bootcmd now boots only
-  the slot's own kernel and never runs that chain, so the image has no `boot`
-  partition at all; vendor U-Boot still reads it at init for its own DTB, and
-  carries on without it. `docs/agents/rauc.md`.
+- **Vendor U-Boot finds the kernel by GPT partition *name*, and the name is
+  `boot`.** Its environment carries `name=boot,size=32M,bootable` and a `bootcmd`
+  of `boot_android ...;boot_fit;bootrkp;run distro_bootcmd;`. Rename that
+  partition and the card flashes perfectly, verifies perfectly, and never loads a
+  kernel — no wifi, no BLE, looks dead. It cost a flash. `docs/agents/rauc.md`.
+  Removing it outright (#98) was reverted too: a fresh flash of that layout on
+  a beta board picked slot A, then reset itself with no LED ever lit, while the
+  same rootfs installed by OTA over the old layout booted. U-Boot reads its own
+  DTB from `boot` at init; try `CONFIG_EMBED_KERNEL_DTB` before removing it again.
+- **In Loader mode, `rkdeveloptool rl` returns `0xCC` past 32 MiB.** Vendor
+  U-Boot's rockusb refuses reads beyond `RKUSB_READ_LIMIT_ADDR` (`cmd/rockusb.c`)
+  and fills the buffer instead; writes are not limited. It reads exactly like
+  a flash that never landed, and was taken for one. Read a rootfs from Maskrom.
 - **A build target picks the image.** `HFJOB_TARGET=microduck-bundle` builds
   whatever `RAUC_SLOT_rootfs` names and nothing else; when that was the prod
   image, the result was a card with no password-less root that answered ping
@@ -80,8 +85,8 @@ confident comment over a guess.
 
 Topics too long for this file, each a list of things that bite:
 
-- `docs/agents/rauc.md` — A/B updates: the partition table, why there is no `boot`
-  partition, `bootloader=noop`, the signing key, what "user data survives" means.
+- `docs/agents/rauc.md` — A/B updates: the partition table, why `boot` cannot be
+  renamed, `bootloader=noop`, the signing key, what "user data survives" means.
 - `docs/agents/hf-jobs.md` — building on HF Jobs: why every job reported
   `ERROR` for a week (`bash -lc` + `.bash_logout` + `set -e`) and the probe
   technique that found it, verifying an artifact before flashing, what is
