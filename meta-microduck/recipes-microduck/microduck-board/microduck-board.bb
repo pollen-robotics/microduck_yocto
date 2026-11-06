@@ -26,13 +26,23 @@ RDEPENDS:${PN} = "microduck-daemon"
 # otherwise. The image's daemon has carried the change since the pin moved to 0.15.3,
 # so it declares; the guard stays for any image built against an older daemon.
 #
+# A board name newer than the daemon is the same failure one level down: robotd
+# reads [board] version as an enum, so a name its release does not know is a
+# parse error and a robotd that will not start. The names are serde's, compiled
+# into robotd as plain strings, so the seeded binary is asked directly; a name it
+# lacks is replaced by MICRODUCK_BOARD_FALLBACK (face-board-v1 -> beta), or not
+# declared at all when there is none. Not the template's comment: a reworded
+# comment would silently drop the board.
+#
 # Scoped to the [board] table: the commented `# version = "zero3"` line under it
 # becomes `version = "<board>"`, or the line is added under the header. Same result
 # as install.sh's declare_board, without its assumption that no other table has a
 # `version` key.
 pkg_postinst:${PN}() {
 	board="${MICRODUCK_BOARD}"
+	fallback="${MICRODUCK_BOARD_FALLBACK}"
 	cfg="$D${sysconfdir}/robot/robotd.toml"
+	robotd="$D/opt/robot/daemon/current/bin/robotd"
 	if [ -z "$board" ]; then
 		echo "microduck-board: MICRODUCK_BOARD is empty; not declaring a board"
 		exit 0
@@ -40,6 +50,18 @@ pkg_postinst:${PN}() {
 	if [ ! -f "$cfg" ] || ! grep -q '^\[board\]$' "$cfg"; then
 		echo "microduck-board: $cfg has no [board] table (daemon predates it); not declaring '$board'"
 		exit 0
+	fi
+	if [ ! -f "$robotd" ]; then
+		echo "ERROR: microduck-board: no robotd at $robotd to check '$board' against" >&2
+		exit 1
+	fi
+	if ! grep -aqF "$board" "$robotd"; then
+		if [ -z "$fallback" ]; then
+			echo "microduck-board: this daemon does not know the board '$board' and there is no fallback; not declaring one"
+			exit 0
+		fi
+		echo "microduck-board: this daemon does not know the board '$board'; declaring '$fallback' instead"
+		board="$fallback"
 	fi
 	awk -v board="$board" '
 		/^\[/ { if (in_board && !done) { print "version = \"" board "\""; done = 1 } in_board = ($0 == "[board]") }

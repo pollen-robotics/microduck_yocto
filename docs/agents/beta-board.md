@@ -102,20 +102,24 @@ detect at install time. The two places it is visible afterwards:
   Zero 3W says `radxa,zero3w-aic8800ds2`, Seeed's factory image
   `seeed,microduck`). This is what software on the robot should switch on.
   With the V1.0 face board it starts with `pollen,microduck-face-board-v1` and
-  still lists `pollen,microduck-beta`; robotd-params matches the
-  `pollen,microduck` prefix, so both read as `beta`.
+  still lists `pollen,microduck-beta`; robotd-params reads that first string as
+  `face-board-v1` and any other `pollen,microduck` prefix as `beta`.
 - **RAUC** `compatible=` is `${MACHINE}`, so a Zero 3W bundle refuses to install
   on a beta board and vice versa -- and a beta bundle on a face-board-v1 robot.
 
 The daemon has its own word for the board: `[board] version` in
-`/etc/robot/robotd.toml` (`"zero3"` or `"beta"`, microduck_daemon#357), which the
-updater turns into the hardware revision a release is checked against (zero3 1,
-beta 2). It is declared, not detected: `microduck-board` writes the machine's
-`MICRODUCK_BOARD` into the file when the image is assembled, which the image's
-daemon (0.15.3, carrying #357) knows. An older robotd refuses unknown tables, so
-the package declares only into a template that already has `[board]` and logs a
-no-op otherwise. `robotctl health` warns when the declaration and
-`/proc/device-tree/compatible` disagree.
+`/etc/robot/robotd.toml` (`"zero3"`, `"beta"` or `"face-board-v1"`,
+microduck_daemon#357), which the updater turns into the hardware revision a
+release is checked against (zero3 1, beta 2, face-board-v1 3). It is declared,
+not detected: `microduck-board` writes the machine's `MICRODUCK_BOARD` into the
+file when the image is assembled, which the image's daemon (0.15.3, carrying #357)
+knows. An older robotd refuses unknown tables, so the package declares only into a
+template that already has `[board]` and logs a no-op otherwise. It refuses unknown
+board names too, so `face-board-v1` is declared only when the seeded `robotd`
+binary contains the name, and `MICRODUCK_BOARD_FALLBACK` (`beta`) otherwise --
+which is why a face-board-v1 image seeded with an older daemon still says `beta`.
+`robotctl health` warns when the declaration and `/proc/device-tree/compatible`
+disagree.
 
 The board **revision** within the beta family comes from hardware. The SARADC
 VIN1 divider (sheet 14) reads raw 1023 on V0.1 ("Version_1"), and Seeed's table
