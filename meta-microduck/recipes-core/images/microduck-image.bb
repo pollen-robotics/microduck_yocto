@@ -6,15 +6,13 @@ require recipes-core/images/core-image-base.bb
 # meta-rockchip: produces the .wic in deploy/.
 inherit rockchip-image extrausers
 
-# The operator account, the same as the Radxa images': microduck / microduck,
-# sudo with that password. Everything the daemon's tooling assumes defaults to
-# it -- duckctl ssh, scripts/dev-push.sh and provision-board.sh all log in as
-# `microduck@` and sudo from there. robot lets robotctl read the daemons'
-# sockets without root (scripts/install.sh adds its operator the same way);
-# audio, video, dialout and i2c are the devices a person debugging a duck pokes
-# at by hand. The hash is `openssl passwd -6 -salt microduckbeta microduck`,
-# fixed so the image stays reproducible; '$' is escaped for bitbake.
-MICRODUCK_OPERATOR_HASH = "\$6\$microduckbeta\$lxVesOQbjM8IXwxq5s/GpwW0KnK1YuspITBn7crCGbeuodZd.PBnJJIS5E32lQK4/mugkqFe36SAr6iyo82Gu0"
+# Keep the operator account, but lock its password in the shipping image. A
+# shared password would give anyone on the robot's network SSH and sudo access
+# to every robot. Factory provisioning must establish a per-device recovery
+# path before this image is shipped. The dev image keeps its bench password.
+# The robot group lets robotctl read daemon sockets without root; the device
+# groups allow hardware diagnostics. `!` is an unusable password hash.
+MICRODUCK_OPERATOR_HASH = "!"
 EXTRA_USERS_PARAMS = "useradd -m -s /bin/bash -G robot,sudo,audio,video,dialout,i2c,plugdev,input -p '${MICRODUCK_OPERATOR_HASH}' microduck;"
 # Group sudo may sudo: recipes-extended/sudo/sudo_%.bbappend.
 

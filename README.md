@@ -35,9 +35,11 @@ new slot does not come up healthy.
 Two images are built from the same recipes:
 
 - **`microduck-image-dev`** (the default) adds password-less root login over ssh
-  and debugging tools (`strace`, `tcpdump`, `evtest`, GStreamer tracers…). It
+  and the shared `microduck` operator password, plus debugging tools (`strace`,
+  `tcpdump`, `evtest`, GStreamer tracers…). It
   only ever adds to the shipping image, so what is verified on it holds for both.
-- **`microduck-image`** is the shipping image, with no root login.
+- **`microduck-image`** is the shipping image, with no root login and a locked
+  operator password. A per-device recovery login must be provisioned before shipment.
 
 ## Get an image
 

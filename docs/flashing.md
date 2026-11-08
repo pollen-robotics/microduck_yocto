@@ -132,8 +132,8 @@ The procedure is the same. What differs:
 - **Serial console**: `/dev/cu.usbmodem*` instead of `/dev/ttyACM0`, for
   example `screen /dev/cu.usbmodem* 115200`.
 - **Network**: the robot shows up in System Settings > Network as a new
-  interface and gets its address on its own; `ssh microduck@192.168.42.1`
-  works the same.
+  interface and gets its address on its own. The dev image accepts
+  `ssh microduck@192.168.42.1`; the shipping image has no shared login password.
 
 ### With the script
 
@@ -177,12 +177,12 @@ About 30 seconds after power-on:
   robot at `192.168.42.1`. The PC gets an address automatically (on some
   desktops you have to enable the new wired connection).
   ```sh
-  ssh microduck@192.168.42.1        # password: microduck
+  ssh microduck@192.168.42.1        # dev image: password microduck; shipping: per-device access required
   cat /etc/os-release               # the release you flashed
   robotctl health
   ```
   There is also a serial console on the same cable, `/dev/ttyACM0` on the PC,
-  with the same login.
+  with the same image-specific login policy.
 
 ## Troubleshooting
 

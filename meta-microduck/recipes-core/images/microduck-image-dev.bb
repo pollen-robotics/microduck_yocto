@@ -5,6 +5,10 @@ dev board holds for the shipping image too."
 
 require recipes-core/images/microduck-image.bb
 
+# Bench boards retain the documented microduck / microduck login. The hash is
+# fixed for reproducible images; '$' is escaped for bitbake.
+MICRODUCK_OPERATOR_HASH = "\$6\$microduckbeta\$lxVesOQbjM8IXwxq5s/GpwW0KnK1YuspITBn7crCGbeuodZd.PBnJJIS5E32lQK4/mugkqFe36SAr6iyo82Gu0"
+
 # The reason this recipe exists.
 #
 # These three were EXTRA_IMAGE_FEATURES in kas/microduck.yml, which applies to
