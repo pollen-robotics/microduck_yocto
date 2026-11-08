@@ -349,6 +349,18 @@ do_install:append() {
 	install -m 0644 ${S}/configd/systemd/configd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/btd/systemd/btd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/mediad/systemd/mediad.service ${D}${systemd_system_unitdir}/
+	# The published daemon release still defaults to an open BLE characteristic and
+	# LAN-wide unauthenticated WebRTC, control and camera snapshot endpoints. Make
+	# the image fail closed until a release with secure defaults is published.
+	# Assert the upstream unit shape so a future release cannot silently bypass this.
+	grep -Fxq 'ExecStart=/opt/robot/daemon/current/bin/btd' ${D}${systemd_system_unitdir}/btd.service || \
+		bbfatal "btd.service changed; review the required pairing override"
+	grep -Fxq 'ExecStart=/opt/robot/daemon/current/bin/mediad' ${D}${systemd_system_unitdir}/mediad.service || \
+		bbfatal "mediad.service changed; review the loopback binding override"
+	sed -i 's|^ExecStart=/opt/robot/daemon/current/bin/btd$|ExecStart=/opt/robot/daemon/current/bin/btd --require-pairing|' \
+		${D}${systemd_system_unitdir}/btd.service
+	sed -i 's|^ExecStart=/opt/robot/daemon/current/bin/mediad$|ExecStart=/opt/robot/daemon/current/bin/mediad --host 127.0.0.1|' \
+		${D}${systemd_system_unitdir}/mediad.service
 	install -m 0644 ${S}/tof/systemd/tofd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/nfc/systemd/nfcd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/netpadd/systemd/netpadd.service ${D}${systemd_system_unitdir}/
