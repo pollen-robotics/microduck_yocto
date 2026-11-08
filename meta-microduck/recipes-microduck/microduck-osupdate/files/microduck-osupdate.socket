@@ -1,10 +1,13 @@
 [Unit]
-Description=microduck OS update API and page (prototype), port 8090
+Description=microduck OS update API and page (local only), port 8090
 
 [Socket]
 # One short-lived microduck-osupdate@.service per connection, inetd-style: no
 # HTTP server package for one page and three endpoints.
-ListenStream=8090
+# The HTTP handler has no authentication. Keep update and slot-switch commands
+# off the LAN until a real authorization path exists. Operators can use the CLI
+# locally or forward this port over an authenticated SSH connection.
+ListenStream=127.0.0.1:8090
 Accept=yes
 MaxConnections=8
 

@@ -27,7 +27,7 @@ new slot does not come up healthy.
   its own partition and survives every update.
 - **OS updates from a published channel**: `microduck-osupdate` checks a public
   bucket for new builds, installs a chosen one, or switches back to the other
-  slot. There is a page for it on the robot at `http://<robot>:8090`.
+  slot. Its prototype HTTP page listens on the robot's loopback interface only.
 - **The board support**: radio drivers and Bluetooth attach for both boards,
   the camera ISP tuning for the beta board, hardware video encoding (MPP), and
   the motor bus on UART2.
@@ -66,7 +66,7 @@ synced over the network.
 
 ## Update a running robot
 
-From the page at `http://<robot>:8090`, or on the robot:
+On the robot:
 
 ```sh
 microduck-osupdate check           # newest build on the channel, and the list of builds
@@ -74,6 +74,10 @@ microduck-osupdate apply [BUILD]   # download, verify, install into the other sl
 microduck-osupdate switch          # boot the other slot as it is (rollback, no download)
 microduck-osupdate status
 ```
+
+The prototype page is available at `http://127.0.0.1:8090` on the robot, or
+through an authenticated SSH port forward. It is not exposed on the LAN because
+the update and slot-switch endpoints do not authenticate callers.
 
 Or install a bundle by hand:
 

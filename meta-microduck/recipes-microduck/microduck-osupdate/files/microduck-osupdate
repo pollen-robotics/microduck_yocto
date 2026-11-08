@@ -375,8 +375,8 @@ http() {
 	# State-changing requests need the X-Microduck header: a page on another origin
 	# cannot add it without a CORS preflight, which this never answers, so a web
 	# page cannot drive a robot on the visitor's LAN into an update.
-	# shortcut: no authentication beyond that; anyone on the LAN can update the
-	# robot. Production: the HF-authenticated dashboard path, or a pairing PIN.
+	# This header is a cross-origin guard, not authentication. The socket binds
+	# to loopback until an authenticated remote update path exists.
 	# One query parameter, build=<14 digits>; anything else in the query is ignored.
 	query=; case "$path" in *\?*) query=${path#*\?}; path=${path%%\?*} ;; esac
 	build=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^build=//p' | head -n 1)
