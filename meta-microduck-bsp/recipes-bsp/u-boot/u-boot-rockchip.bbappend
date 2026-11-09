@@ -11,9 +11,11 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 # rauc-env.cfg reaches the defconfig despite make.sh: oe-core's uboot_configure()
 # still runs merge_config.sh over every .cfg in SRC_URI. fw_env.config is installed
 # by oe-core's u-boot.inc into ${PN}-env. The patch prepends slot selection to
-# bootcmd; run scripts/test-uboot-bootcmd.sh before changing it.
+# bootcmd; run scripts/test-uboot-bootcmd.sh before changing it. no-network.cfg
+# turns U-Boot's network stack off (the file says why).
 SRC_URI += " \
     file://rauc-env.cfg \
+    file://no-network.cfg \
     file://fw_env.config \
     file://0001-evb_rk3568-select-the-RAUC-slot-before-Rockchip-s-boot.patch \
 "
@@ -38,6 +40,8 @@ microduck_check_uboot_config() {
 	for line in $(grep -vE '^[[:space:]]*(#|$)' ${UNPACKDIR}/rauc-env.cfg); do
 		grep -qxF "$line" ${B}/.config || bbfatal "rauc-env.cfg: '$line' is not in the merged ${B}/.config"
 	done
+	# no-network.cfg is all "is not set" lines, which the loop above skips as comments.
+	! grep -q '^CONFIG_NET=y' ${B}/.config || bbfatal "no-network.cfg did not take: CONFIG_NET=y in ${B}/.config"
 }
 do_configure[postfuncs] += "microduck_check_uboot_config"
 
@@ -92,3 +96,4 @@ microduck_check_beta_ddr() {
 	fi
 }
 do_compile[postfuncs] += "${@'microduck_check_beta_ddr' if 'microduck-beta' in d.getVar('MACHINEOVERRIDES').split(':') else ''}"
+
