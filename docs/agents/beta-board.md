@@ -188,7 +188,8 @@ mode talks to. Flashing goes through it, with `rkdeveloptool`.
    **bytes**, not sectors: `rl 0 33554432 first32M.img` reads the first 32 MiB.
    That is the cheap backup of a board's bootloader area before reflashing.
 
-   The `.wic` is sparse at 12.1 GiB, and `wl` writes every byte of it, zeros
+   The `.wic` is sparse at 9.1 GiB (12.1 before the 2026-11-09 layout), and `wl`
+   writes every byte of it, zeros
    included, so expect minutes rather than seconds over USB 2.
 
 ### A board stuck in maskrom

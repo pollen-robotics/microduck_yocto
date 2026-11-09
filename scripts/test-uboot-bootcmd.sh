@@ -58,6 +58,7 @@ work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 	echo '#include <stdio.h>'
 	echo '#define RKIMG_BOOTCOMMAND "echo REACHED_BOOT_CHAIN;"'
 	sed -n 's/^+//; /^#define MICRODUCK_RAUC_SELECT/,/rauc\.slot=\${rauc_slot}; "$/p' "$PATCH"
+	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_[AB]_GUID /p' "$PATCH"
 	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_BOOT/,/falling back to the boot partition\\"; "$/p' "$PATCH"
 	echo 'int main(void){ fputs(MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT RKIMG_BOOTCOMMAND, stdout); return 0; }'
 } > "$work/gen.c"
@@ -69,21 +70,34 @@ BOOTCMD=$("$work/gen" | sed -e 's/saveenv;/echo SAVEENV_CALLED;/g' \
 [ -n "$BOOTCMD" ] || { echo "could not extract the boot script from $PATCH"; exit 1; }
 grep -qF BOOTI_FROM_PART <<< "$BOOTCMD" || { echo "booti stub did not apply; $PATCH changed shape"; exit 1; }
 
-# A card for ext4load, bound as host device 0: GPT with the wks's entries, ext4 in
-# partitions 6 (rootfs_a) and 7 (rootfs_b). /boot/Image and microduck.dtb are
-# symlinks, as on the real rootfs, so U-Boot's ext4 symlink handling is exercised.
-# mkcard CARD A B: A/B = 1 puts a kernel in that slot.
+# A card for ext4load, bound as host device 0: GPT with the wks's entries and the
+# slots' fixed partition GUIDs, which is how the script finds them. Two layouts:
+# "new" (no boot_b: rootfs_a 5, rootfs_b 6, data 7) and "old" (cards flashed while
+# boot_b existed: 6, 7, 8); "noguid" is the new layout without the GUIDs.
+# /boot/Image and microduck.dtb are symlinks, as on the real rootfs, so U-Boot's ext4
+# symlink handling is exercised.
+# mkcard CARD LAYOUT A B: A/B = 1 puts a kernel in that slot.
+GUID_A=$(sed -n 's/^+#define MICRODUCK_ROOTFS_A_GUID "\(.*\)"$/\1/p' "$PATCH")
+GUID_B=$(sed -n 's/^+#define MICRODUCK_ROOTFS_B_GUID "\(.*\)"$/\1/p' "$PATCH")
 mkcard() {
-	local card=$1 a_kernel=$2 b_kernel=$3 fs want
+	local card=$1 layout=$2 a_kernel=$3 b_kernel=$4 fs want pa pb
 	truncate -s 64M "$card"
 	# -o in a call of its own: combined with -n on a fresh file, sgdisk writes no
 	# entries and still exits 0.
 	sgdisk -o "$card" >/dev/null
-	sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M -n 4:0:+1M -n 5:0:+1M \
-		-n 6:0:+16M -n 7:0:+16M "$card" >/dev/null
-	for p in 6 7; do
+	if [ "$layout" = old ]; then
+		pa=6; pb=7
+		sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M -n 4:0:+1M -n 5:0:+1M \
+			-n 6:0:+16M -n 7:0:+16M -n 8:0:+1M "$card" >/dev/null
+	else
+		pa=5; pb=6
+		sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M -n 4:0:+1M \
+			-n 5:0:+16M -n 6:0:+16M -n 7:0:+1M "$card" >/dev/null
+	fi
+	[ "$layout" = noguid ] || sgdisk -u "$pa:$GUID_A" -u "$pb:$GUID_B" "$card" >/dev/null
+	for p in $pa $pb; do
 		fs=$work/fs$p; rm -rf "$fs"; mkdir -p "$fs/boot"
-		want=$a_kernel; [ "$p" = 7 ] && want=$b_kernel
+		want=$a_kernel; [ "$p" = "$pb" ] && want=$b_kernel
 		if [ "$want" = 1 ]; then
 			echo "kernel-$p" > "$fs/boot/Image-6.1.84"; ln -s Image-6.1.84 "$fs/boot/Image"
 			echo "dtb-$p" > "$fs/boot/board.dtb"; ln -s board.dtb "$fs/boot/microduck.dtb"
@@ -93,7 +107,9 @@ mkcard() {
 		dd if="$work/p$p.img" of="$card" bs=512 seek="$start" conv=notrunc status=none
 	done
 }
-mkcard "$work/none" 0 0; mkcard "$work/both" 1 1; mkcard "$work/a-only" 1 0
+[ -n "$GUID_A" ] && [ -n "$GUID_B" ] || { echo "no MICRODUCK_ROOTFS_[AB]_GUID in $PATCH"; exit 1; }
+mkcard "$work/none" new 0 0; mkcard "$work/both" new 1 1; mkcard "$work/a-only" new 1 0
+mkcard "$work/old-both" old 1 1; mkcard "$work/noguid" noguid 1 1
 # devtype/devnum come from Rockchip's board init on the board; addresses are the
 # board's kernel_addr_r/fdt_addr_r, inside the sandbox's RAM. The slot-selection
 # cases run on a card with no kernel anywhere, so the script falls through to the
@@ -173,11 +189,20 @@ boot_case() {  # name, card, env setup, then expected / forbidden (!-prefixed) s
 	grep -qiE 'syntax error|Unknown command' <<< "$out" && { ok=0; echo "     parser complained"; }
 	if [ $ok = 1 ]; then pass=$((pass + 1)); echo "ok   $name"; else fail=$((fail + 1)); echo "FAIL $name"; echo "$out" | tail -5 | sed 's/^/     | /'; fi
 }
-boot_case "kernel in A: loaded from partition 6, Rockchip chain not reached" both "" \
-	"RAUC: kernel from rootfs_a" "BOOTI_FROM_PART 6" "!REACHED_BOOT_CHAIN"
-boot_case "after rauc install, B first: loaded from partition 7" both \
+boot_case "new layout, kernel in A: found by GUID at partition 5" both "" \
+	"rootfs_a is partition 5" "RAUC: kernel from rootfs_a" "BOOTI_FROM_PART 5" "!REACHED_BOOT_CHAIN"
+boot_case "new layout, B first: found by GUID at partition 6" both \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
-	"RAUC: kernel from rootfs_b" "BOOTI_FROM_PART 7" "!REACHED_BOOT_CHAIN"
+	"rootfs_b is partition 6" "RAUC: kernel from rootfs_b" "BOOTI_FROM_PART 6" "!REACHED_BOOT_CHAIN"
+boot_case "old layout (boot_b still there), A: found at partition 6" old-both "" \
+	"rootfs_a is partition 6" "BOOTI_FROM_PART 6" "!REACHED_BOOT_CHAIN"
+boot_case "old layout, B first: found at partition 7" old-both \
+	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
+	"rootfs_b is partition 7" "BOOTI_FROM_PART 7" "!REACHED_BOOT_CHAIN"
+# A card whose slots lack the GUIDs: nothing found, so nothing is loaded from a
+# guessed partition -- it falls through as a slot without a kernel does.
+boot_case "no slot GUID on the card: no partition guessed, falls through" noguid "" \
+	"!BOOTI_FROM_PART" "REACHED_BOOT_CHAIN"
 boot_case "B has no kernel: falls back to the boot partition" a-only \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
 	"no kernel in rootfs_b, falling back" "REACHED_BOOT_CHAIN" "!BOOTI_FROM_PART"

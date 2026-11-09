@@ -22,20 +22,21 @@ inside rauc-mark-good's window (or a boot that hangs) spent slot A's attempts
 and silently moved the board to B. Put "A B" back when that is fixed --
 pollen-robotics/microduck_yocto#24.
 
-Then boot the kernel and DTB in the chosen slot's own /boot (ext4load from
-partition 6 or 7, booti), so a RAUC bundle carries its kernel; only a slot
-without them falls through to RKIMG_BOOTCOMMAND and the `boot` partition.
+Then boot the kernel and DTB in the chosen slot's own /boot (ext4load,
+booti), so a RAUC bundle carries its kernel; only a slot without them falls
+through to RKIMG_BOOTCOMMAND and the `boot` partition. The slot's partition
+is found by its GPT partition GUID (fixed in the wks) with `part uuid`, not
+by number: the numbers moved when boot_b was dropped from the layout, and
+looking them up keeps this U-Boot right on both the old and the new layout.
 
 Upstream-Status: Inappropriate [microduck RAUC integration]
 ---
- include/configs/evb_rk3568.h | 67 ++++++++++++++++++++++++++++++++++++-
- 1 file changed, 66 insertions(+), 1 deletion(-)
+ include/configs/evb_rk3568.h | 82 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 81 insertions(+), 1 deletion(-)
 
-diff --git a/include/configs/evb_rk3568.h b/include/configs/evb_rk3568.h
-index f7318c3..d20cdca 100644
 --- a/include/configs/evb_rk3568.h
 +++ b/include/configs/evb_rk3568.h
-@@ -19,8 +19,73 @@
+@@ -19,8 +19,88 @@
  
  #define CONFIG_SYS_MMC_ENV_DEV		0
  
@@ -89,16 +90,31 @@ index f7318c3..d20cdca 100644
 +
 +/*
 + * microduck: boot the kernel and DTB that live in the chosen slot's rootfs, so a
-+ * RAUC bundle carries its own kernel and an update can change it. rootfs_a is GPT
-+ * partition 6 and rootfs_b 7 (scripts/check-wks-layout.py checks it; this tree has
-+ * no `part number`). /boot/microduck.dtb is the machine's DTB under one name, so
-+ * one U-Boot serves both boards. A slot without them falls through to Rockchip's
-+ * chain and the kernel in the `boot` partition, as before.
++ * RAUC bundle carries its own kernel and an update can change it. /boot/microduck.dtb
++ * is the machine's DTB under one name, so one U-Boot serves both boards. A slot
++ * without them falls through to Rockchip's chain and the kernel in the `boot`
++ * partition, as before.
++ *
++ * The slot's partition is found by its GPT partition GUID, fixed in the wks, not by
++ * number: this tree has no `part number` and ext4load wants one, and the numbers
++ * moved when boot_b went (rootfs 6/7 before, 5/6 after). Looking it up keeps one
++ * U-Boot right on both layouts, so a U-Boot-only reflash of an older card still
++ * boots. scripts/check-wks-layout.py checks the GUIDs against the wks.
 + */
++#define MICRODUCK_ROOTFS_A_GUID "614e0000-0000-4b53-8000-1d28000054a9"
++#define MICRODUCK_ROOTFS_B_GUID "614e0001-0000-4b53-8000-1d28000054a9"
 +#define MICRODUCK_ROOTFS_BOOT \
-+	"setenv rauc_partnum 6; " \
-+	"if test \"x${rauc_slot}\" = \"xB\"; then setenv rauc_partnum 7; fi; " \
-+	"if ext4load ${devtype} ${devnum}:${rauc_partnum} ${kernel_addr_r} /boot/Image && " \
++	"setenv rauc_guid " MICRODUCK_ROOTFS_A_GUID "; " \
++	"if test \"x${rauc_slot}\" = \"xB\"; then setenv rauc_guid " MICRODUCK_ROOTFS_B_GUID "; fi; " \
++	"setenv rauc_partnum; " \
++	"for rauc_n in 1 2 3 4 5 6 7 8 9 10 11 12; do " \
++		"if part uuid ${devtype} ${devnum}:${rauc_n} rauc_u; then " \
++			"if test \"x${rauc_u}\" = \"x${rauc_guid}\"; then setenv rauc_partnum ${rauc_n}; fi; " \
++		"fi; " \
++	"done; setenv rauc_n; setenv rauc_u; setenv rauc_guid; " \
++	"echo \"RAUC: ${rauc_part} is partition ${rauc_partnum}\"; " \
++	"if test -n \"${rauc_partnum}\" && " \
++	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${kernel_addr_r} /boot/Image && " \
 +	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${fdt_addr_r} /boot/microduck.dtb; then " \
 +		"echo \"RAUC: kernel from ${rauc_part}\"; booti ${kernel_addr_r} - ${fdt_addr_r}; " \
 +	"fi; " \

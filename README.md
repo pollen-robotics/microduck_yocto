@@ -226,11 +226,17 @@ fixed offsets there without reading the GPT:
 | 1 | `v_storage` | 3.5 MiB | 256 KiB | Rockchip vendor storage: MAC, serial |
 | 2 | `uboot_env` | 0x3F8000 | 32 KiB | U-Boot environment: slot order and retry counters |
 | 3 | `uboot` | 8 MiB | 4 MiB | `uboot.img` |
-| 4 | `boot` | 16 MiB | 32 MiB | fallback kernel and device tree |
-| 5 | `boot_b` | 48 MiB | 32 MiB | reserved |
-| 6 | `rootfs_a` | 80 MiB | 2 GiB | slot A, kernel included |
-| 7 | `rootfs_b` | 2128 MiB | 2 GiB | slot B |
-| 8 | `data` | 4176 MiB | 8 GiB | `/var/lib/robot`: policies, sounds, config, wifi |
+| 4 | `boot` | 16 MiB | 32 MiB | the device tree U-Boot reads for itself at start-up, and a fallback kernel |
+| 5 | `rootfs_a` | 48 MiB | 4 GiB | slot A, kernel included |
+| 6 | `rootfs_b` | 4144 MiB | 4 GiB | slot B |
+| 7 | `data` | 8240 MiB | 1 GiB, then the rest of the disk | `/var/lib/robot`: policies, sounds, config, wifi |
+
+The slot size is the ceiling for every OS update a robot will take: the table
+never changes after flashing. `data` is small in the image, so it flashes fast and
+fits a 16 GB card, and `microduck-data-grow` extends it to the end of the disk on
+the first boot. U-Boot finds the slots by their partition GUIDs, so the same
+U-Boot also boots cards flashed with the older layout (`boot_b` at 48 MiB, slots
+at 6/7).
 
 [`docs/agents/rauc.md`](docs/agents/rauc.md) has the update design and its
 traps.

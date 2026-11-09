@@ -64,6 +64,9 @@ you didn't look. This repo already has a scar for each:
   a beta board picked slot A, then reset itself with no LED ever lit, while the
   same rootfs installed by OTA over the old layout booted. U-Boot reads its own
   DTB from `boot` at init; try `CONFIG_EMBED_KERNEL_DTB` before removing it again.
+  What it needs from `boot` is that DTB, not the kernel: a `boot` holding only
+  the header and the resource section booted a beta (2026-11-09). The slots are
+  found by partition GUID, not number (`docs/agents/rauc.md`).
 - **In Loader mode, `rkdeveloptool rl` returns `0xCC` past 32 MiB.** Vendor
   U-Boot's rockusb refuses reads beyond `RKUSB_READ_LIMIT_ADDR` (`cmd/rockusb.c`)
   and fills the buffer instead; writes are not limited. It reads exactly like

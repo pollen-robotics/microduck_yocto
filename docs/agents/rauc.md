@@ -29,8 +29,22 @@ Vendor U-Boot finds the kernel by GPT partition name — its environment carries
 `name=boot,size=32M,bootable` and `bootcmd=boot_android ...;boot_fit;bootrkp;run
 distro_bootcmd;`. Called `boot_a`, the card flashes perfectly, RKNS is at sector
 64, a valid `ANDROID!` image sits in the slot, and the board never loads a kernel:
-no wifi, no BLE, looks dead. `boot_b` is reserved at its offset for stage 2, which
-is where renaming the pair belongs — beside the `boot.scr` that can choose.
+no wifi, no BLE, looks dead.
+
+**And `boot` must exist even though the kernel comes from the slot.** Vendor
+U-Boot reads its *own* device tree from it at init (`init_kernel_dtb()`, long
+before the boot script), from the `rk-kernel.dtb` entry of the Rockchip resource
+section after the kernel. Without the partition a beta board resets before Linux
+(#98, reverted in #105); with a `boot` holding only the header and that resource,
+no kernel, a beta booted normally (2026-11-09). `check-wks-layout.py` fails a wks
+without it.
+
+**The 2026-11-09 layout** dropped `boot_b` (reserved for a kernel A/B that never
+came: the kernel moved into the slots instead), moved the slots up to 48 MiB,
+made them 4 GiB, and made `data` 1 GiB in the image, grown to the end of the disk
+on first boot by `microduck-data-grow` (`recipes-core/microduck-data`). The slot
+size is the ceiling for every OS update a shipped robot takes; the table never
+changes after flashing.
 
 ## The kernel is in the slot (2026-10-16)
 
@@ -42,9 +56,15 @@ only when they are missing does it fall through to Rockchip's chain and the
 DTB and modules together, and a kernel or toolchain change is an ordinary update
 instead of a reflash. Traps:
 
-- **By number, not label.** `ext4load` takes `mmc <dev>:<part>`, and this U-Boot
-  has no `part number`: rootfs_a is 6 and rootfs_b 7. `check-wks-layout.py`
-  compares those with the boot script, so a reordered wks fails in 0.1 s.
+- **By GUID, not label or number.** `ext4load` takes `mmc <dev>:<part>`, and this
+  U-Boot has no `part number`, so the script walks partitions 1-12 with
+  `part uuid` and takes the one whose GPT partition GUID is the slot's (fixed in
+  the wks: `614e0000-…` for A, `614e0001-…` for B). The numbers moved when
+  `boot_b` went (6/7 before, 5/6 now); looking them up keeps one U-Boot right on
+  both, so `flash-emmc.sh recover` with a new U-Boot still boots an older card.
+  No GUID found means no partition is guessed: the slot falls through as one
+  without a kernel. `check-wks-layout.py` compares the GUIDs in the wks with the
+  boot script, and `test-uboot-bootcmd.sh` runs both layouts.
 - **The bundle hook checks the bootcmd U-Boot will run**, from `fw_printenv`, not
   the U-Boot binary: a saved environment keeps its bootcmd, and a card that kept
   an old environment would boot the `boot` partition's kernel against the slot's
@@ -379,7 +399,9 @@ Each of those reboots spends an attempt, so a slot on trial that never reaches
 
 ## What is not done
 
-- `boot_b` is reserved and empty; the kernel's A/B is the slots' `/boot` (above).
+- No bootloader update: a bundle never writes the idblock or U-Boot, so both stay
+  as flashed. Rockchip packs U-Boot as two copies in `uboot` (a damaged first one
+  falls back to the second), which is redundancy, not a safe update path.
 - **A fresh card seeds `BOOT_ORDER="A"`**, not `"A B"`, so B is only booted when
   a RAUC install or a `switch` puts it first. It started (2026-10-06) as a
   temporary pin after bring-up kept landing on B; it is now the design (next
