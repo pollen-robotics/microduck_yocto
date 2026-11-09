@@ -16,6 +16,8 @@
 set -eu
 
 PART=${DATA_GROW_PART:-/dev/disk/by-partlabel/data}
+# The mounted device, if the label link is gone (see the udev note below).
+[ -e "$PART" ] || PART=$(findmnt -n -o SOURCE /var/lib/robot 2>/dev/null || echo "$PART")
 SYS=${DATA_GROW_SYS:-/sys/class/block}
 
 part=$(readlink -f "$PART")
@@ -45,9 +47,21 @@ if [ $((disk_sectors - 34 - end)) -gt 2048 ]; then
 	# After a flash the backup GPT sits at the end of the image, not of the disk.
 	sfdisk --quiet --relocate gpt-bak-std "$disk"
 	echo ", +" | sfdisk --quiet --force --no-reread --no-tell-kernel -N "$num" "$disk"
-	# The partition is mounted, so the kernel is told its new size directly.
-	sectors=$(partx -g -o SECTORS -n "$num" "$disk" | tr -d ' ')
-	resizepart "$disk" "$num" "$sectors"
+fi
+
+# The partition is mounted, so the kernel cannot re-read the table; partx -u resizes
+# its view of this one partition from the table on disk. Checked rather than trusted:
+# on a beta's first boot the kernel kept the old size and resize2fs then had nothing
+# to do. Also run when the table was grown on an earlier boot but the kernel was not.
+want=$(partx -g -o SECTORS -n "$num" "$disk" | tr -d ' ')
+if [ "$(cat "$SYS/$name/size")" != "$want" ]; then
+	partx -u -n "$num" "$disk"
+	[ "$(cat "$SYS/$name/size")" = "$want" ] || {
+		echo "the kernel still sees $(cat "$SYS/$name/size") sectors for $part, the table says $want"
+		exit 1
+	}
+	# udev drops the by-partlabel link while the kernel and the table disagree.
+	udevadm trigger --action=change "$SYS/$name" && udevadm settle || true
 fi
 
 # Online, on the mounted filesystem; a no-op once it fills the partition.
