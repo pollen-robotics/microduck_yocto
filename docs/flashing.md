@@ -182,7 +182,8 @@ About 30 seconds after power-on:
   robotctl health
   ```
   There is also a serial console on the same cable, `/dev/ttyACM0` on the PC,
-  with the same login.
+  with the same login. The shipping image answers ssh only on this cable; the
+  dev image also does over wifi.
 
 ## Troubleshooting
 

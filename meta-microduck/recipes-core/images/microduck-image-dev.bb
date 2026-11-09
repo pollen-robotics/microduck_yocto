@@ -20,6 +20,18 @@ require recipes-core/images/microduck-image.bb
 # nooelint: oelint.var.badimagefeature
 IMAGE_FEATURES += "allow-empty-password allow-root-login empty-root-password"
 
+# ssh on every interface, wifi included. Where the shipping image limits
+# sshd.socket to the USB link (microduck-ssh-access's 10-usb-only.conf), this
+# installs that package's own reset as a permanent, later drop-in: it adds access
+# back rather than removing the shipping one. No package, nothing to reset.
+ROOTFS_POSTPROCESS_COMMAND += "sshd_any_interface"
+sshd_any_interface() {
+	reset=${IMAGE_ROOTFS}${datadir}/microduck-ssh-access/30-wifi-until-reboot.conf
+	[ -e "$reset" ] || return 0
+	install -d ${IMAGE_ROOTFS}${sysconfdir}/systemd/system/sshd.socket.d
+	install -m 0644 "$reset" ${IMAGE_ROOTFS}${sysconfdir}/systemd/system/sshd.socket.d/20-dev-any-interface.conf
+}
+
 # The dev bundle's build id is plain DATETIME, meta-rauc's RAUC_BUNDLE_BUILD default.
 MICRODUCK_BUILD_ID = "${DATETIME}"
 

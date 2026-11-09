@@ -1,0 +1,13 @@
+[Unit]
+Description=Open ssh on every interface until reboot
+
+# The drop-in goes to /run, a tmpfs, so a reboot closes wifi ssh again by itself.
+# It sorts after 10-usb-only.conf and resets what that sets.
+# RemainAfterExit keeps the path unit from triggering this again in a loop.
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/mkdir -p /run/systemd/system/sshd.socket.d
+ExecStart=/usr/bin/cp /usr/share/microduck-ssh-access/30-wifi-until-reboot.conf /run/systemd/system/sshd.socket.d/
+ExecStart=/usr/bin/systemctl daemon-reload
+ExecStart=/usr/bin/systemctl restart sshd.socket
