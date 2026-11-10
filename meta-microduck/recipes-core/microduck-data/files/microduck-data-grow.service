@@ -1,0 +1,14 @@
+[Unit]
+Description=Grow the data partition to the end of the disk
+# After the mount, so resize2fs grows the ext4 online; /usr/libexec/microduck-data-grow
+# says why, and why every boot is safe.
+ConditionPathExists=/dev/disk/by-partlabel/data
+Requires=var-lib-robot.mount
+After=var-lib-robot.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/microduck-data-grow
+
+[Install]
+WantedBy=multi-user.target

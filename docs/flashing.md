@@ -78,7 +78,7 @@ sha256sum -c microduck-image-microduck-face-board-v1.rootfs-*.wic.zst.sha256sum 
 zstd -d microduck-image-microduck-face-board-v1.rootfs-*.wic.zst
 ```
 
-This gives a `.wic` of about 12 GiB. That file is what gets written to every
+This gives a `.wic` of about 9.1 GiB. That file is what gets written to every
 robot.
 
 **Use the face-board-v1 files only.** The release also carries `microduck-beta`
@@ -106,7 +106,7 @@ face LEDs will not work.
    ```
    It prints the eMMC's information, including its size. If it fails, see
    "Troubleshooting".
-5. **Write the image.** This takes several minutes: the whole 12 GiB goes over
+5. **Write the image.** This takes several minutes: the whole 9.1 GiB goes over
    USB 2, empty space included.
    ```sh
    sudo rkdeveloptool wl 0 microduck-image-microduck-face-board-v1.rootfs-*.wic

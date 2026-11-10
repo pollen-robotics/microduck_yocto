@@ -1,0 +1,67 @@
+#!/bin/sh
+# Grow the data partition, and the ext4 on it, to the end of the disk.
+#
+# The image carries a small data partition so it stays small and quick to flash
+# (rkdeveloptool writes every byte of the .wic, zeros included) and fits a 16 GB SD
+# card; the eMMC is far bigger. Run by microduck-data-grow.service on every boot,
+# after /var/lib/robot is mounted, and idempotent: each step checks whether it is
+# already done, so a power cut part-way through is finished on the next boot, and a
+# board already at full size costs one resize2fs that says "Nothing to do".
+#
+# Only ever the data partition, and only while it is the last one on the disk:
+# anything else after it means the layout is not the one this image wrote, and the
+# partition table is left alone.
+#
+# Paths can be pointed elsewhere for scripts/test-data-grow.sh.
+set -eu
+
+# The unit only runs when this link exists (ConditionPathExists).
+PART=${DATA_GROW_PART:-/dev/disk/by-partlabel/data}
+SYS=${DATA_GROW_SYS:-/sys/class/block}
+
+part=$(readlink -f "$PART")
+name=${part##*/}
+[ -e "$SYS/$name/partition" ] || { echo "no data partition at $PART"; exit 0; }
+num=$(cat "$SYS/$name/partition")
+diskname=$(basename "$(readlink -f "$SYS/$name/..")")
+disk=/dev/$diskname
+
+start=$(cat "$SYS/$name/start")
+end=$((start + $(cat "$SYS/$name/size")))
+# The last partition on the disk must be this one.
+for p in "$SYS/$diskname/$diskname"*; do
+	[ -e "$p/start" ] || continue
+	e=$(($(cat "$p/start") + $(cat "$p/size")))
+	if [ "$e" -gt "$end" ]; then
+		echo "data ($part) is not the last partition (${p##*/} ends after it); not resizing"
+		exit 0
+	fi
+done
+
+# The usable area ends 34 sectors before the disk does: the backup GPT header and
+# its partition entries. Grow only when more than 1 MiB is left.
+disk_sectors=$(blockdev --getsz "$disk")
+if [ $((disk_sectors - 34 - end)) -gt 2048 ]; then
+	echo "growing $part (partition $num of $disk) to the end of the disk"
+	# After a flash the backup GPT sits at the end of the image, not of the disk.
+	sfdisk --quiet --relocate gpt-bak-std "$disk"
+	echo ", +" | sfdisk --quiet --force --no-reread --no-tell-kernel -N "$num" "$disk"
+fi
+
+# The partition is mounted, so the kernel cannot re-read the table; partx -u resizes
+# its view of this one partition from the table on disk. Checked rather than trusted:
+# on a beta's first boot the kernel kept the old size and resize2fs then had nothing
+# to do. Also run when the table was grown on an earlier boot but the kernel was not.
+want=$(partx -g -o SECTORS -n "$num" "$disk" | tr -d ' ')
+if [ "$(cat "$SYS/$name/size")" != "$want" ]; then
+	partx -u -n "$num" "$disk"
+	[ "$(cat "$SYS/$name/size")" = "$want" ] || {
+		echo "the kernel still sees $(cat "$SYS/$name/size") sectors for $part, the table says $want"
+		exit 1
+	}
+	# udev drops the by-partlabel link while the kernel and the table disagree.
+	udevadm trigger --action=change "$SYS/$name" && udevadm settle || true
+fi
+
+# Online, on the mounted filesystem; a no-op once it fills the partition.
+resize2fs "$part"

@@ -60,10 +60,22 @@ you didn't look. This repo already has a scar for each:
   of `boot_android ...;boot_fit;bootrkp;run distro_bootcmd;`. Rename that
   partition and the card flashes perfectly, verifies perfectly, and never loads a
   kernel — no wifi, no BLE, looks dead. It cost a flash. `docs/agents/rauc.md`.
-  Removing it outright (#98) was reverted too: a fresh flash of that layout on
-  a beta board picked slot A, then reset itself with no LED ever lit, while the
-  same rootfs installed by OTA over the old layout booted. U-Boot reads its own
-  DTB from `boot` at init; try `CONFIG_EMBED_KERNEL_DTB` before removing it again.
+  That chain is no longer run: our boot script boots the kernel in the chosen
+  slot, which it finds by partition GUID, not number (`docs/agents/rauc.md`).
+  **But `boot` must stay**, because U-Boot reads its *own* DTB from it at init.
+  Without it a fresh flash still boots, with no `serial-number` (beta,
+  2026-11-10). So since 2026-11-10 `boot` is 4 MiB and holds only that DTB, no
+  kernel; a fresh flash of it has the serial back (verified the same day).
+  Testing it on a board that already
+  ran hides this: the serial survives in U-Boot's saved environment. Only a
+  fresh flash shows it. (#98 removed `boot` and a fresh flash then reset
+  before Linux; that build's cause was never found, and it was reverted.)
+- **Never name an image file in a wks comment.** meta-rockchip's `do_fixup_wks`
+  greps the whole wks for `[^=]*\.img`, comments included, splits each match into
+  words, and deletes every line holding `file=<word>` for a word that is not a
+  deployed file. A comment saying "every boot ... boot" followed by the image
+  name deleted the `boot` partition line itself: two builds came out with no
+  `boot` and nothing in any log (2026-11-10). `check-wks-layout.py` refuses it.
 - **In Loader mode, `rkdeveloptool rl` returns `0xCC` past 32 MiB.** Vendor
   U-Boot's rockusb refuses reads beyond `RKUSB_READ_LIMIT_ADDR` (`cmd/rockusb.c`)
   and fills the buffer instead; writes are not limited. It reads exactly like
@@ -177,7 +189,11 @@ only thing that may differ between hosts; anything else belongs in
   no UART adapter was ever attached to read that console and `robotd` needs
   `/dev/ttyS2`. Note it only silences *Linux* — U-Boot's
   `CONFIG_DEBUG_UART_BASE` is UART2 too, so U-Boot still prints onto the motor
-  wires at power-on.
+  wires at power-on. And when its boot script stops (no slot with a bootable
+  kernel left), U-Boot sits at its prompt *reading* UART2: anything on the bus
+  is taken as typed commands. Nothing drives the bus then (no `robotd`, and the
+  servos only answer), but never leave a board stopped there with a servo
+  master attached.
 
   Setting the flag is **two halves**, and the kernel fragment alone does
   nothing. `motorbus.cfg` turns `CONFIG_FIQ_DEBUGGER` off, which frees the

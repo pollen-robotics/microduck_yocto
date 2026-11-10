@@ -11,11 +11,21 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 # rauc-env.cfg reaches the defconfig despite make.sh: oe-core's uboot_configure()
 # still runs merge_config.sh over every .cfg in SRC_URI. fw_env.config is installed
 # by oe-core's u-boot.inc into ${PN}-env. The patch prepends slot selection to
-# bootcmd; run scripts/test-uboot-bootcmd.sh before changing it.
+# bootcmd; run scripts/test-uboot-bootcmd.sh before changing it. no-network.cfg
+# turns U-Boot's network stack off (the file says why). 0002-0006 are mainline
+# fixes for the CVEs this U-Boot can reach -- ext4 and DOS partition parsing,
+# which load our kernel -- backported to Rockchip's 2017.09; each carries a `CVE:`
+# line, which is how cve-check marks them patched.
 SRC_URI += " \
     file://rauc-env.cfg \
+    file://no-network.cfg \
     file://fw_env.config \
     file://0001-evb_rk3568-select-the-RAUC-slot-before-Rockchip-s-boot.patch \
+    file://0002-Fix-ext4-block-group-descriptor-sizing.patch \
+    file://0003-CVE-2019-13103-disk-stop-infinite-recursion-in-DOS.patch \
+    file://0004-CVE-2019-13104-ext4-check-for-underflow-in-ext4fs_re.patch \
+    file://0005-CVE-2019-13106-ext4-fix-out-of-bounds-memset.patch \
+    file://0006-ext4-Fix-integer-overflow-in-ext4fs_read_symlink.patch \
 "
 
 # The name libubootenv falls back to on a blank environment. Without that file the
@@ -38,6 +48,8 @@ microduck_check_uboot_config() {
 	for line in $(grep -vE '^[[:space:]]*(#|$)' ${UNPACKDIR}/rauc-env.cfg); do
 		grep -qxF "$line" ${B}/.config || bbfatal "rauc-env.cfg: '$line' is not in the merged ${B}/.config"
 	done
+	# no-network.cfg is all "is not set" lines, which the loop above skips as comments.
+	! grep -q '^CONFIG_NET=y' ${B}/.config || bbfatal "no-network.cfg did not take: CONFIG_NET=y in ${B}/.config"
 }
 do_configure[postfuncs] += "microduck_check_uboot_config"
 
@@ -92,3 +104,29 @@ microduck_check_beta_ddr() {
 	fi
 }
 do_compile[postfuncs] += "${@'microduck_check_beta_ddr' if 'microduck-beta' in d.getVar('MACHINEOVERRIDES').split(':') else ''}"
+
+# Known U-Boot CVEs that cannot reach this build, by reason, each checked against
+# the merged .config and the u-boot ELF of a rk3568_defconfig build (2026-11-09).
+# The scanner matches the version string (2017.09), not the code. Of the rest:
+# 0002-0006 above are patched; CVE-2018-18440 (fs loads overwriting U-Boot's
+# memory) needs lmb_alloc_addr(), absent here, and changes how our kernel loads,
+# so it stays open; CVE-2019-11690 (gen_rand_uuid unseeded) only affects GUIDs the
+# `gpt` command generates, which nothing does at boot.
+CVE_STATUS_GROUPS += "CVE_STATUS_UBOOT_NET CVE_STATUS_UBOOT_FIT_SIG CVE_STATUS_UBOOT_SQUASHFS CVE_STATUS_UBOOT_CMDS CVE_STATUS_UBOOT_ABSENT"
+CVE_STATUS_UBOOT_NET = " \
+    CVE-2018-18439 CVE-2019-14192 CVE-2019-14193 CVE-2019-14194 CVE-2019-14195 \
+    CVE-2019-14196 CVE-2019-14197 CVE-2019-14198 CVE-2019-14199 CVE-2019-14200 \
+    CVE-2019-14201 CVE-2019-14202 CVE-2019-14203 CVE-2019-14204 CVE-2022-30767 \
+    CVE-2024-42040 CVE-2026-29007 CVE-2026-29008 CVE-2026-29009 CVE-2026-71971 \
+    CVE-2026-74220 CVE-2026-74221 CVE-2026-74222 CVE-2026-74225 \
+"
+CVE_STATUS_UBOOT_NET[status] = "not-applicable-config: the network stack is not built (no-network.cfg); no network function is in the u-boot ELF"
+CVE_STATUS_UBOOT_FIT_SIG = "CVE-2018-1000205 CVE-2020-10648 CVE-2021-27097 CVE-2021-27138 CVE-2026-46728"
+CVE_STATUS_UBOOT_FIT_SIG[status] = "not-applicable-config: FIT signature verification is off (CONFIG_FIT_SIGNATURE, CONFIG_SPL_FIT_SIGNATURE unset); the boot script loads a raw Image"
+CVE_STATUS_UBOOT_SQUASHFS = "CVE-2024-57254 CVE-2024-57255 CVE-2024-57257 CVE-2024-57258 CVE-2024-57259 CVE-2026-71973"
+CVE_STATUS_UBOOT_SQUASHFS[status] = "not-applicable-config: this 2017.09 tree has no SquashFS support (no fs/squashfs)"
+CVE_STATUS_UBOOT_CMDS = "CVE-2020-8432 CVE-2022-34835 CVE-2022-2347 CVE-2026-71972"
+CVE_STATUS_UBOOT_CMDS[status] = "not-applicable-config: the code is not built: gpt rename (CONFIG_CMD_GPT_RENAME), i2c md (CONFIG_CMD_I2C), USB DFU (CONFIG_CMD_DFU), RLE8 bitmaps (no CONFIG_VIDEO_BMP_RLE8 here)"
+CVE_STATUS_UBOOT_ABSENT = "CVE-2026-71974"
+CVE_STATUS_UBOOT_ABSENT[status] = "not-applicable-config: the code is not in this 2017.09 tree (boot/bootmeth_android.c came years later)"
+CVE_STATUS[CVE-2025-24857] = "not-applicable-platform: Qualcomm IPQ SoCs only; this is a Rockchip RK3566"

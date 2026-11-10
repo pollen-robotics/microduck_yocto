@@ -29,22 +29,75 @@ Vendor U-Boot finds the kernel by GPT partition name — its environment carries
 `name=boot,size=32M,bootable` and `bootcmd=boot_android ...;boot_fit;bootrkp;run
 distro_bootcmd;`. Called `boot_a`, the card flashes perfectly, RKNS is at sector
 64, a valid `ANDROID!` image sits in the slot, and the board never loads a kernel:
-no wifi, no BLE, looks dead. `boot_b` is reserved at its offset for stage 2, which
-is where renaming the pair belongs — beside the `boot.scr` that can choose.
+no wifi, no BLE, looks dead.
+
+That was the vendor chain. Ours no longer runs it (next section), **but `boot`
+must still exist, holding U-Boot's own device tree.** Vendor U-Boot reads it at
+init (`init_kernel_dtb()`, long before the boot script), from the `rk-kernel.dtb`
+entry of the Rockchip resource section, and sets itself up from it. Without it,
+it falls back to a generic built-in tree that cannot reach the OTP, so
+`rockchip_set_serialno()` (`arch/arm/mach-rockchip/board.c`) gets no serial. Measured on a beta,
+2026-11-10: a fresh flash with no `boot` booted, with no
+`/proc/device-tree/serial-number` and an empty `serial#`. The serial feeds the USB
+gadget's MACs (`microduck-usb-gadget`: the same on every robot without it) and the
+Zero 3W's robot identity (`robotd-params`).
+
+Not the Wi-Fi MAC, though it looked like it: the chip's permanent address is fixed
+(`ip link` shows it as `permaddr`), and what changes on every boot of a fresh flash
+is NetworkManager's random scanning MAC (`addr_assign_type` 3), used while no Wi-Fi
+network is configured, with or without `boot`.
+
+**Test this from a fresh flash only.** Our bootcmd's `saveenv` stores `serial#`
+in the environment with everything else, so a board that once booted with `boot`
+keeps its serial after `boot` is zeroed or deleted. Two such tests passed before
+the fresh flash showed the loss.
+
+So `boot.img` is the Android header plus the resource section, **with no
+kernel**: the kernel recipe rebuilds it with an empty kernel
+(`microduck_boot_img_dtb_only`), about 0.2 MiB in a 4 MiB partition. Verified on
+a fresh flash of a beta (2026-11-10, build 6af2f3c3): `serial-number` and `serial#`
+back (the same value the board had before), the USB MAC back to its old value, and
+then an update into slot B, `reboot loader`, and a slot with no kernel given up
+on in favour of the other. (#98 removed
+`boot` entirely and a fresh flash reset before Linux; that build also hard-coded
+the slot numbers, and its cause was never found. Reverted in #105.)
+`check-wks-layout.py` fails a wks without `boot`.
+
+**The 2026-11-09/10 layout** dropped `boot_b` (reserved for a kernel A/B that
+never came: the kernel moved into the slots instead), shrank `boot` to 4 MiB with
+no kernel, kept the slots at 48 MiB (20..48 MiB unallocated), made them 4 GiB,
+and made `data` 1 GiB in the image, grown to the end of the disk on first boot by
+`microduck-data-grow` (`recipes-core/microduck-data`). The slot size is the
+ceiling for every OS update a shipped robot takes; the table never changes after
+flashing.
 
 ## The kernel is in the slot (2026-10-16)
 
 Each rootfs carries `/boot/Image` and `/boot/microduck.dtb` (a symlink to the
 machine's DTB, so one bootcmd serves both boards). After picking the slot,
-U-Boot's script `ext4load`s both from that slot's partition and `booti`s them;
-only when they are missing does it fall through to Rockchip's chain and the
-`boot` partition, which stays as that fallback. So a bundle carries the kernel,
-DTB and modules together, and a kernel or toolchain change is an ordinary update
-instead of a reflash. Traps:
+U-Boot's script `ext4load`s both from that slot's partition and `booti`s them.
+So a bundle carries the kernel, DTB and modules together, and a kernel or
+toolchain change is an ordinary update instead of a reflash. Rockchip's chain is
+not run at all (since 2026-11-10; before, a slot without a kernel fell through to
+it and to the `boot` partition's kernel, which did not match the slot's modules;
+`boot` now has none).
+A slot whose kernel does not load or boot has its counter zeroed and the board
+resets onto the next slot in `BOOT_ORDER`; with that slot alone in `BOOT_ORDER`
+U-Boot stops instead of looping, and a power cycle tries again. With no kernel in
+either slot it gives up on the first, marks it (`rauc_nokernel` in the
+environment), and stops on the second rather than reset into "no slot has attempts
+left" and round again for ever. Traps:
 
-- **By number, not label.** `ext4load` takes `mmc <dev>:<part>`, and this U-Boot
-  has no `part number`: rootfs_a is 6 and rootfs_b 7. `check-wks-layout.py`
-  compares those with the boot script, so a reordered wks fails in 0.1 s.
+- **By GUID, not label or number.** `ext4load` takes `mmc <dev>:<part>`, and this
+  U-Boot has no `part number`, so the script walks partitions 1-12 with
+  `part uuid` and takes the one whose GPT partition GUID is the slot's (fixed in
+  the wks: `614e0000-…` for A, `614e0001-…` for B). The numbers differ between
+  layouts (6/7 with `boot` and `boot_b`, 5/6 now, 4/5 on a card flashed by a
+  #98 build); looking them up keeps one U-Boot right on all of them, so `flash-emmc.sh
+  recover` with a new U-Boot still boots an older card. No GUID found means no
+  partition is guessed: the slot is handled as one without a kernel.
+  `check-wks-layout.py` compares the GUIDs in the wks with the boot script, and
+  `test-uboot-bootcmd.sh` runs every layout.
 - **The bundle hook checks the bootcmd U-Boot will run**, from `fw_printenv`, not
   the U-Boot binary: a saved environment keeps its bootcmd, and a card that kept
   an old environment would boot the `boot` partition's kernel against the slot's
@@ -277,7 +330,8 @@ Traps:
 
 ## User data survives; know exactly what that means
 
-`data` is ext4, 8 GiB, mounted at `/var/lib/robot` by `recipes-core/microduck-data/`.
+`data` is ext4, 1 GiB in the image and grown to the end of the disk on first boot
+(`microduck-data-grow`), mounted at `/var/lib/robot` by `recipes-core/microduck-data/`.
 That is where the daemon already keeps everything a user adds — `POLICY_LIBRARY`,
 the sound bank, `StateDirectory=robot/*` — so **no daemon change was needed**,
 and that was checked: the policy installer's `fs::rename` calls stay inside the
@@ -313,14 +367,14 @@ the image, reseeded on flash. A slot switch reverts the daemon to the image's
 seed and `updaterd` converges it again — test that deliberately once stage 2 exists.
 
 **A RAUC-written slot's filesystem is the image's size, not the slot's.** `rauc
-install` writes the bundle's ext4 raw into the 2 GiB slot. The image is ~740 MB with
+install` writes the bundle's ext4 raw into the 4 GiB slot. The image is ~740 MB with
 ~90 MB free, so after one daemon release (~51 MB, and updaterd keeps `golden` and
 `current`), the next update failed preflight (`DiskSpace`, 2026-10-02). Only a
-flashed slot A got 2 GiB, from wic's `--fixed-size`. The root line of fstab
+flashed slot A got 4 GiB, from wic's `--fixed-size`. The root line of fstab
 carries `x-systemd.growfs` (`recipes-core/base-files`). systemd-fstab-generator
 turns that into `systemd-growfs-root.service`, which grows `/` online at boot; on
 the board it took 69 ms. Do not "fix" this with `IMAGE_ROOTFS_SIZE`: every bundle
-would then carry 2 GiB.
+would then carry 4 GiB.
 
 ## Fallback only on trial
 
@@ -379,7 +433,9 @@ Each of those reboots spends an attempt, so a slot on trial that never reaches
 
 ## What is not done
 
-- `boot_b` is reserved and empty; the kernel's A/B is the slots' `/boot` (above).
+- No bootloader update: a bundle never writes the idblock or U-Boot, so both stay
+  as flashed. Rockchip packs U-Boot as two copies in `uboot` (a damaged first one
+  falls back to the second), which is redundancy, not a safe update path.
 - **A fresh card seeds `BOOT_ORDER="A"`**, not `"A B"`, so B is only booted when
   a RAUC install or a `switch` puts it first. It started (2026-10-06) as a
   temporary pin after bring-up kept landing on B; it is now the design (next
