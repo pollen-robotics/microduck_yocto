@@ -17,6 +17,8 @@ inherit rockchip-image extrausers
 MICRODUCK_OPERATOR_HASH = "\$6\$microduckbeta\$lxVesOQbjM8IXwxq5s/GpwW0KnK1YuspITBn7crCGbeuodZd.PBnJJIS5E32lQK4/mugkqFe36SAr6iyo82Gu0"
 EXTRA_USERS_PARAMS = "useradd -m -s /bin/bash -G robot,sudo,audio,video,dialout,i2c,plugdev,input -p '${MICRODUCK_OPERATOR_HASH}' microduck;"
 # Group sudo may sudo: recipes-extended/sudo/sudo_%.bbappend.
+# A shared password is acceptable only because ssh is reachable over the head's
+# USB-C link alone (microduck-ssh-access below): using it means opening the robot.
 
 # The card image to download and flash is the compressed .wic.zst plus its .bmap:
 # `bmaptool copy` writes only the blocks in use, instead of dd copying all 13 GB.
@@ -70,6 +72,13 @@ microduck_build_id() {
 }
 
 IMAGE_FEATURES += "ssh-server-openssh"
+
+# ssh over the head's USB-C link only, and on wifi on request until reboot:
+# microduck-ssh-access. Only on a machine with the USB gadget, since without
+# usb0 it would leave no ssh at all. The Zero 3W has none and keeps ssh on
+# every interface: it is a stand-in board, never sold, whichever image it runs.
+# microduck-image-dev.bb reopens port 22 everywhere on every machine.
+IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
 
 IMAGE_INSTALL:append = " \
     microduck-daemon \

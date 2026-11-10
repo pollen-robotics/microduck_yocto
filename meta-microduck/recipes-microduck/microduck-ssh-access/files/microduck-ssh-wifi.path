@@ -1,0 +1,10 @@
+[Unit]
+Description=Open ssh on wifi when asked, until reboot
+
+# Only root can create a file directly in /run, so only root can ask: configd
+# (on a BLE request) or `sudo touch` over the USB link.
+[Path]
+PathExists=/run/microduck-ssh-wifi
+
+[Install]
+WantedBy=paths.target

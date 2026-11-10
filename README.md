@@ -34,10 +34,14 @@ new slot does not come up healthy.
 
 Two images are built from the same recipes:
 
-- **`microduck-image-dev`** (the default) adds password-less root login over ssh
-  and debugging tools (`strace`, `tcpdump`, `evtest`, GStreamer tracers…). It
+- **`microduck-image-dev`** (the default) adds password-less root login, ssh over
+  wifi as well as USB, and debugging tools (`strace`, `tcpdump`, `evtest`, GStreamer tracers…). It
   only ever adds to the shipping image, so what is verified on it holds for both.
-- **`microduck-image`** is the shipping image, with no root login.
+- **`microduck-image`** is the shipping image. Its ssh listens only on the
+  head's USB-C link (`192.168.42.1`), never on wifi, with no root login:
+  `microduck` / `microduck` and sudo. Reaching that port means opening the robot.
+  `sudo touch /run/microduck-ssh-wifi` opens ssh on wifi until the next reboot.
+  The Zero 3W has no USB link and keeps ssh on wifi: it is never sold.
 
 ## Get an image
 
