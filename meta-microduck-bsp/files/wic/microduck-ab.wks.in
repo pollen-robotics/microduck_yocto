@@ -53,10 +53,16 @@ part --source rawcopy --sourceparams="file=uboot.img" --offset 8M --fixed-size 4
 # rk-kernel.dtb in this partition at init (init_kernel_dtb, before any boot script),
 # found by the exact name `boot`. Without it, it falls back to a generic tree that
 # cannot read the OTP: a fresh flash then has no serial-number and a Wi-Fi MAC that
-# changes every boot (beta, 2026-11-10). boot.img has no kernel (the kernel recipe
+# changes every boot (beta, 2026-11-10). Its image has no kernel (the kernel recipe
 # builds it so): U-Boot boots only the slot's, and a slot without one is given up
 # on (the U-Boot patch). ~0.2 MiB used. 20..48 MiB stays unallocated, so the slots
 # keep their offsets.
+#
+# No comment in this file may name an image file: meta-rockchip's do_fixup_wks
+# greps the whole wks for names ending in the image suffix, comments included,
+# splits each match into words and deletes every line holding "file=<word>" for a
+# word that is not a deployed file. A comment reading "every boot ... boot<dot>img"
+# took this very line out of two builds (2026-11-10). check-wks-layout.py refuses it.
 part --source rawcopy --sourceparams="file=boot.img" --offset 16M --fixed-size 4M --part-name boot
 
 # The kernel's root= comes from U-Boot's boot script (root=PARTLABEL=rootfs_a|b).

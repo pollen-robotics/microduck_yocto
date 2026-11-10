@@ -73,6 +73,13 @@ def main():
             # that only shows up at do_image_wic.
             errors.append(f"line continuation, which wic does not support: {line}")
             continue
+        # meta-rockchip's do_fixup_wks greps every line for "[^=]*\.img" and deletes
+        # the lines holding "file=<word>" for each word of a match that is not a
+        # deployed file. In a comment, "every boot ... boot.img" deleted the boot
+        # partition line (2026-11-10).
+        if line.startswith("#") and ".img" in line:
+            errors.append(f"a comment naming an image file; do_fixup_wks would act on it: {line}")
+            continue
         if not line.startswith("part"):
             continue
         name = re.search(r"--part-name (\S+)", line)

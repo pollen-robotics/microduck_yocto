@@ -70,6 +70,12 @@ you didn't look. This repo already has a scar for each:
   ran hides this: the serial survives in U-Boot's saved environment. Only a
   fresh flash shows it. (#98 removed `boot` and a fresh flash then reset
   before Linux; that build's cause was never found, and it was reverted.)
+- **Never name an image file in a wks comment.** meta-rockchip's `do_fixup_wks`
+  greps the whole wks for `[^=]*\.img`, comments included, splits each match into
+  words, and deletes every line holding `file=<word>` for a word that is not a
+  deployed file. A comment saying "every boot ... boot" followed by the image
+  name deleted the `boot` partition line itself: two builds came out with no
+  `boot` and nothing in any log (2026-11-10). `check-wks-layout.py` refuses it.
 - **In Loader mode, `rkdeveloptool rl` returns `0xCC` past 32 MiB.** Vendor
   U-Boot's rockusb refuses reads beyond `RKUSB_READ_LIMIT_ADDR` (`cmd/rockusb.c`)
   and fills the buffer instead; writes are not limited. It reads exactly like
