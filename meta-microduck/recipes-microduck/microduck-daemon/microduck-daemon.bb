@@ -628,6 +628,12 @@ RRECOMMENDS:${PN}:append:aarch64 = " onnxruntime"
 # 0.16.2).
 RDEPENDS:${PN} += "microduck-policies"
 
+# The duck detector's model, seeded for the same reason as the policy set, so the
+# detector works offline from the first boot. RRECOMMENDS: the detector is off by
+# default and mediad runs fine without a model. Bump it with DETECTOR_VERSION in the
+# daemon's scripts/seed-detector.sh.
+RRECOMMENDS:${PN} += "microduck-detector"
+
 # RAUC marks a slot good only if the same check robot-boot-check makes passes:
 # its own recipe, installed wherever the daemon is.
 RDEPENDS:${PN} += "microduck-slot-health"
