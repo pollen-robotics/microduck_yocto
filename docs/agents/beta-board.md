@@ -275,7 +275,7 @@ Each step assumes the ones before it passed.
 
 The newest daemon release unless the build names one (README.md, "Which daemon
 the image seeds"; a CI run's summary has a `daemon:` line), with
-`microduck-policies_v8.bb`, the policy set releases 0.16.2 onwards name as their
+`microduck-policies_v9.bb`, the policy set releases 0.19.0 onwards name as their
 floor. `tofd` drives the ToF over SPI from 0.16.0 (microduck#364), so this board
 needs 0.16.0 or later. Every release from 0.15.3 builds on wrynose's Rust 1.94.1;
 0.15.1 and 0.15.2 needed 1.99. A robot with network still converges to newer
