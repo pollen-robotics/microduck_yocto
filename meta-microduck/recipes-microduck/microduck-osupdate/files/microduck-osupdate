@@ -70,7 +70,7 @@ other_installed() { other_slot_json | grep -o '"installed":{"timestamp":"[^"]*"'
 # this board. RAUC alone is not enough: once a slot's trial ends, BOOT_ORDER names only
 # that slot, and RAUC reads every slot BOOT_ORDER does not name as bad.
 GOOD_RECORD=/var/lib/robot/slot-health/good
-# A BOOT_<slot>_LEFT of zero, or none: U-Boot writes hex ("0x0"), RAUC decimal.
+# A BOOT_<slot>_LEFT of zero, or none: U-Boot writes "0x0", RAUC plain hex ("0").
 left_zero() { [ -z "$1" ] || printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
 # Is the booted slot still on trial? First in BOOT_ORDER, with the other slot listed
 # after it and holding attempts: microduck-slot-health reboots such a slot when it
@@ -84,6 +84,12 @@ on_trial() {
 	[ -n "$o" ] || return 1
 	case " $order " in *" $o "*) ;; *) return 1 ;; esac
 	! left_zero "$(fw_printenv -n "BOOT_${o}_LEFT" 2>/dev/null)"
+}
+# RAUC's mark-good wrote the booted slot's counter back this boot: it writes plain hex
+# ("3"), where U-Boot's own decrement before the boot left "0x2" (the U-Boot patch's note).
+marked_good() {
+	n=$(fw_printenv -n "BOOT_$(booted_name)_LEFT" 2>/dev/null) || return 1
+	case $n in "" | 0x*) return 1 ;; esac
 }
 other_good() {
 	other_slot_json | grep -q '"boot_status":"good"' ||
@@ -278,6 +284,24 @@ boot_report() {
 	p=$STATE/pending.env
 	t=$STATE/target.env
 	ph=$(cat "$STATE/phase" 2>/dev/null || true)
+	# Only an update to report, or an install a power cut may have stopped, needs RAUC;
+	# an ordinary boot does not ask it.
+	if [ -f "$p" ] || { [ "$ph" = installing ] && [ -f "$t" ]; }; then
+		# One answer from RAUC for the whole report, so every question below reads the same.
+		RAUC_JSON=$(rauc_json) || RAUC_JSON=
+		if [ -z "$RAUC_JSON" ]; then
+			# No answer: on a boot that failed, this runs during the reboot slot-health
+			# asked for, while rauc.service stops. Everything stays for the next boot to
+			# report. Outside a shutdown no reboot is coming, so an update waiting on its
+			# outcome is not left showing "rebooting" until one does; an install a power cut
+			# stopped keeps "installing", which the next boot needs to rebuild pending.env.
+			if [ -f "$p" ] && [ "$(systemctl is-system-running 2>/dev/null || true)" != stopping ]; then
+				say "rauc did not answer; what $(field "$p" VERSION) came to waits for the next boot"
+				phase idle
+			fi
+			exit 0
+		fi
+	fi
 	# RAUC records the build and switches the boot order before apply writes
 	# pending.env, so a power cut between the two leaves an install with no
 	# pending.env: the board boots it, or, once U-Boot gave up on it, is back on the
@@ -304,15 +328,29 @@ boot_report() {
 	how=$(field "$p" HOW); how=${how:-updated}
 	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
 	if [ "$(rauc_build)" = "$build" ]; then
-		if booted_good; then
+		# Whether this boot passed is slot-health's verdict, which this runs after: active
+		# once it passed (RemainAfterExit), failed when it did not. Not RAUC's boot_status,
+		# which calls a slot good while BOOT_ORDER names it with attempts left, so it reads
+		# good on the boots that fail too.
+		# Passed and still on trial means rauc's mark-good failed: U-Boot can still go back.
+		verdict=$(systemctl is-active microduck-slot-health.service 2>/dev/null || true)
+		if [ "$verdict" = active ] && { ! on_trial || marked_good; }; then
 			r="$how to $version"
 		elif on_trial; then
-			# Not an outcome yet: this boot failed and the slot reboots to try again, or to
-			# go back. Keeping pending.env lets the boot that settles it say which --
-			# "rolled back" from the old slot, or "updated to" once a boot passes.
-			say "$version failed its health check; retrying, and going back if it keeps failing"
+			# Not an outcome yet: the slot boots again, to pass or to go back. Keeping
+			# pending.env lets the boot that settles it say which -- "rolled back" from
+			# the old slot, or "updated to" once a boot passes and is marked good.
+			case $verdict in
+			active) say "$version passed its health check, but rauc did not mark it good; waiting for a boot that does" ;;
+			failed) say "$version failed its health check; retrying, and going back if it keeps failing" ;;
+			*) say "$version is still on trial, with no health check result this boot; waiting for the next" ;;
+			esac
 			phase idle
 			exit 0
+		elif [ "$verdict" != failed ] && booted_good; then
+			# No verdict from slot-health this boot (its job never ran, or systemctl could
+			# not say): RAUC's word, off trial, is all there is.
+			r="$how to $version"
 		else
 			r="booted $version, but it did not pass the health check"
 		fi
