@@ -189,7 +189,11 @@ only thing that may differ between hosts; anything else belongs in
   no UART adapter was ever attached to read that console and `robotd` needs
   `/dev/ttyS2`. Note it only silences *Linux* — U-Boot's
   `CONFIG_DEBUG_UART_BASE` is UART2 too, so U-Boot still prints onto the motor
-  wires at power-on.
+  wires at power-on. And when its boot script stops (no slot with a bootable
+  kernel left), U-Boot sits at its prompt *reading* UART2: anything on the bus
+  is taken as typed commands. Nothing drives the bus then (no `robotd`, and the
+  servos only answer), but never leave a board stopped there with a servo
+  master attached.
 
   Setting the flag is **two halves**, and the kernel fragment alone does
   nothing. `motorbus.cfg` turns `CONFIG_FIQ_DEBUGGER` off, which frees the

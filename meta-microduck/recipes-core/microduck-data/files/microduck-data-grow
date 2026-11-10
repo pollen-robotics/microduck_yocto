@@ -15,9 +15,8 @@
 # Paths can be pointed elsewhere for scripts/test-data-grow.sh.
 set -eu
 
+# The unit only runs when this link exists (ConditionPathExists).
 PART=${DATA_GROW_PART:-/dev/disk/by-partlabel/data}
-# The mounted device, if the label link is gone (see the udev note below).
-[ -e "$PART" ] || PART=$(findmnt -n -o SOURCE /var/lib/robot 2>/dev/null || echo "$PART")
 SYS=${DATA_GROW_SYS:-/sys/class/block}
 
 part=$(readlink -f "$PART")

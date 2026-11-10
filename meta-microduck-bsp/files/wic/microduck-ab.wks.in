@@ -18,7 +18,7 @@
 # The slots are the ceiling for every OS update a shipped board will ever take: the
 # table never changes after flashing. 4 GiB each, against ~0.4 GiB used in 2026-11,
 # so there is room to grow. data starts small to keep the image small and quick to
-# flash, and takes the rest of the eMMC (~54 GiB on a beta) on its first boot.
+# flash, and takes the rest of the eMMC (~50 GiB on a beta) on its first boot.
 #
 # The first 16 MiB are Rockchip's documented table, not a choice: vendor code
 # writes vendor storage, the environment and U-Boot at fixed byte offsets without

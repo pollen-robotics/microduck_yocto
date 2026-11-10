@@ -185,6 +185,14 @@ if grep -qF "no slot has attempts left" <<< "$out" && ! grep -qF "booting slot B
 	pass=$((pass + 1)); echo "ok   A pinned and spent: resets, never boots B"
 else fail=$((fail + 1)); echo "FAIL A pinned and spent: resets, never boots B"; fi
 
+# B given up (no kernel) while A was already spent: both spent, the mark still set.
+# The counter reset must clear it, or the next boot's B -- still without a kernel --
+# would stop instead of being given up on, and A, which has one, never be tried.
+out=$("$SANDBOX" -c "setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 0; setenv BOOT_B_LEFT 0; setenv rauc_nokernel 1; $(sed -e 's/reset;/echo RESET_CALLED;/g' <<< "$SELECT") printenv rauc_nokernel" 2>&1) || true
+if grep -qF "no slot has attempts left" <<< "$out" && grep -qF RESET_CALLED <<< "$out" && ! grep -qF "rauc_nokernel=1" <<< "$out"; then
+	pass=$((pass + 1)); echo "ok   both spent with the mark set: the counter reset clears it"
+else fail=$((fail + 1)); echo "FAIL both spent with the mark set: the counter reset clears it"; fi
+
 # The kernel in the slot: booted from the slot's own partition. A slot without one
 # is given up on: its counter zeroed and saved, then a reset. CMD picks the
 # variant: BOOTCMD as on the board, NORESET to print the counters left behind.

@@ -36,16 +36,17 @@ there is nothing to reset onto, so it stops rather than loop, rewriting the
 environment, until the power is pulled. Likewise when no slot has a kernel:
 giving up sets rauc_nokernel, and a second slot without a kernel while it is
 set stops (and clears it) instead of resetting into the counter reset and
-round again. A kernel that loads clears it.
+round again. Resetting the counters clears it, and so does a kernel that
+loads.
 
 Upstream-Status: Inappropriate [microduck RAUC integration]
 ---
- include/configs/evb_rk3568.h | 109 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 108 insertions(+), 1 deletion(-)
+ include/configs/evb_rk3568.h | 111++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 110 insertions(+), 1 deletion(-)
 
 --- a/include/configs/evb_rk3568.h
 +++ b/include/configs/evb_rk3568.h
-@@ -19,8 +19,115 @@
+@@ -19,8 +19,117 @@
  
  #define CONFIG_SYS_MMC_ENV_DEV		0
  
@@ -93,7 +94,7 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 +		"echo \"RAUC: booting slot ${rauc_slot} (${rauc_part})\"; saveenv; " \
 +	"else " \
 +		"echo \"RAUC: no slot has attempts left, resetting both to 3\"; " \
-+		"setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3; saveenv; reset; " \
++		"setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3; setenv rauc_nokernel; saveenv; reset; " \
 +	"fi; " \
 +	"setenv bootargs root=PARTLABEL=${rauc_part} rauc.slot=${rauc_slot}; "
 +
@@ -123,8 +124,10 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 + * The same holds when no slot has a kernel: giving up on A, then on B, then finding
 + * every counter spent and resetting them would loop too. So giving up leaves a mark
 + * (rauc_nokernel), and a slot that also has no kernel while it is set stops instead,
-+ * clearing it so a power cycle tries both slots once more. A kernel that loads
-+ * clears it before booting.
++ * clearing it so a power cycle tries both slots once more. Resetting the counters
++ * clears it too, or a slot given up on before them would stop the next one. A kernel
++ * that loads clears it before booting; one that loads but booti rejects (a bad
++ * header) is given up on like a missing one, and two such slots can still loop.
 + */
 +#define MICRODUCK_ROOTFS_A_GUID "614e0000-0000-4b53-8000-1d28000054a9"
 +#define MICRODUCK_ROOTFS_B_GUID "614e0001-0000-4b53-8000-1d28000054a9"

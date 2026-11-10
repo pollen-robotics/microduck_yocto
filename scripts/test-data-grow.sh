@@ -39,7 +39,6 @@ case " $* " in
 esac
 EOF
 printf '#!/bin/sh\ncat "$STUB/disk_sectors"\n' > "$work/bin/blockdev"
-printf '#!/bin/sh\nexit 1\n' > "$work/bin/findmnt"
 chmod +x "$work/bin/"*
 
 pass=0; fail=0

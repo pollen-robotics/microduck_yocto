@@ -49,10 +49,10 @@ do_install() {
 }
 
 # microduck-daemon ships /var/lib/robot itself; this adds two subdirectories.
-# microduck-data-grow: grows the data partition (sfdisk, partx, findmnt,
-# blockdev) and then its ext4, online (resize2fs).
+# microduck-data-grow: grows the data partition (sfdisk, partx, blockdev) and
+# then its ext4, online (resize2fs).
 RDEPENDS:${PN} += "microduck-daemon networkmanager \
-    util-linux-sfdisk util-linux-partx util-linux-findmnt util-linux-blockdev e2fsprogs-resize2fs"
+    util-linux-sfdisk util-linux-partx util-linux-blockdev e2fsprogs-resize2fs"
 
 FILES:${PN} = " \
     ${systemd_system_unitdir}/var-lib-robot.mount \

@@ -330,7 +330,8 @@ Traps:
 
 ## User data survives; know exactly what that means
 
-`data` is ext4, 8 GiB, mounted at `/var/lib/robot` by `recipes-core/microduck-data/`.
+`data` is ext4, 1 GiB in the image and grown to the end of the disk on first boot
+(`microduck-data-grow`), mounted at `/var/lib/robot` by `recipes-core/microduck-data/`.
 That is where the daemon already keeps everything a user adds — `POLICY_LIBRARY`,
 the sound bank, `StateDirectory=robot/*` — so **no daemon change was needed**,
 and that was checked: the policy installer's `fs::rename` calls stay inside the
@@ -366,14 +367,14 @@ the image, reseeded on flash. A slot switch reverts the daemon to the image's
 seed and `updaterd` converges it again — test that deliberately once stage 2 exists.
 
 **A RAUC-written slot's filesystem is the image's size, not the slot's.** `rauc
-install` writes the bundle's ext4 raw into the 2 GiB slot. The image is ~740 MB with
+install` writes the bundle's ext4 raw into the 4 GiB slot. The image is ~740 MB with
 ~90 MB free, so after one daemon release (~51 MB, and updaterd keeps `golden` and
 `current`), the next update failed preflight (`DiskSpace`, 2026-10-02). Only a
-flashed slot A got 2 GiB, from wic's `--fixed-size`. The root line of fstab
+flashed slot A got 4 GiB, from wic's `--fixed-size`. The root line of fstab
 carries `x-systemd.growfs` (`recipes-core/base-files`). systemd-fstab-generator
 turns that into `systemd-growfs-root.service`, which grows `/` online at boot; on
 the board it took 69 ms. Do not "fix" this with `IMAGE_ROOTFS_SIZE`: every bundle
-would then carry 2 GiB.
+would then carry 4 GiB.
 
 ## Fallback only on trial
 
