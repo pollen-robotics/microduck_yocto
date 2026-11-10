@@ -100,6 +100,14 @@ say 'gst-inspect-1.0 2>/dev/null | grep -iE "rockchip|mpp"' 8
 say 'gst-inspect-1.0 rockchipmpp 2>&1 | head -n 18' 8
 say 'ls /dev/mpp_service /dev/rga 2>&1'
 
+# Every GStreamer plugin mediad loads must register, or mediad fails at runtime
+# with "no element ..." and the build never notices: the image installs these by
+# name (packagegroup-microduck-media), not the whole plugin sets. Plugin names,
+# so the list reads like that packagegroup's measurement: keep the two in step.
+# A missing one prints GST-MISSING and fails this script.
+GST_PLUGINS="app coreelements debugutilsbad dtls nice rockchipmpp rsrtp rswebrtc rtp rtpmanager sctp srtp video4linux2 videoconvertscale videofilter videoparsersbad videorate videotestsrc webrtc"
+say "for p in $GST_PLUGINS; do gst-inspect-1.0 \$p >/dev/null 2>&1 || echo GST-MISSING \$p; done; echo GST-CHECKED" 20
+
 # ONNX Runtime: ort dlopens the unversioned name, so that symlink must exist in the
 # runtime package. robotd works without it and only fails to walk.
 say 'ls -l /usr/lib/libonnxruntime.so*'
@@ -111,3 +119,12 @@ kill $QPID 2>/dev/null
 exec 3>&-
 rm -f "$FIFO"
 echo "=== done, $(wc -l < "$LOG") lines ==="
+
+# Output lines only: the echoed command contains the words too, but as
+# `GST-MISSING $p`, never followed by a plugin name.
+if grep -aqE '(^|\r)GST-MISSING [a-z0-9]' "$LOG"; then
+	echo "FAIL: GStreamer plugins mediad needs are missing:"
+	grep -aoE 'GST-MISSING [a-z0-9]+' "$LOG" | sort -u
+	exit 1
+fi
+grep -aqE '(^|\r)GST-CHECKED' "$LOG" || { echo "FAIL: the GStreamer plugin check never ran"; exit 1; }

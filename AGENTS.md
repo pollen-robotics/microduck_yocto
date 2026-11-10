@@ -259,6 +259,16 @@ the image seeds"), and `SRCREV_daemon` is still a **release** commit, never
 `main` — the manifest's `source_revision`. Same version string on different code
 is how `updaterd` decides there is nothing to do.
 
+**When you bump `SRCREV_daemon`, check mediad's GStreamer elements against
+`packagegroup-microduck-media`.** The image installs only the plugins mediad
+loads, by name, not the whole plugin sets. A daemon release that starts using a
+new element (audio, an overlay, another encoder) still builds, and mediad then
+fails on the robot with "no element ...". Read the release's
+`ElementFactory::make` calls in `mediad/src`, and for anything new add its
+plugin's package to the packagegroup and its plugin name to the list in
+`scripts/qemu-test.sh`. The packagegroup's comment says how the list was
+measured and how to measure it again.
+
 ## Commits
 
 Per the workspace convention, no `Co-Authored-By:`. Use a single
