@@ -121,6 +121,7 @@ microduck_setuid_allowlist() {
 }
 
 IMAGE_INSTALL:append = " \
+    microduck-hardening \
     microduck-daemon \
     microduck-daemon-padd \
     microduck-board \
