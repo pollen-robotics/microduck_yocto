@@ -91,7 +91,37 @@ BAD_RECOMMENDATIONS += " \
 # microduck-image-dev.bb reopens port 22 everywhere on every machine.
 IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
 
+# Setuid and setgid only where something needs it. The image carried 16 setuid
+# binaries (2026-11-10), each one a way from any local process to root: shadow's
+# su, passwd, chage, chfn, chsh, expiry, gpasswd and newgrp, util-linux's mount
+# and umount, newuidmap/newgidmap, and busybox.suid (ping, traceroute, vlock).
+# Nothing on the robot runs them as a user: there is one operator account and it
+# has sudo, and no daemon, hook or unit calls any of them (checked). The binaries
+# stay; only the bit goes, for root they work as before.
+#
+# An allowlist, not a list to strip, so a package added later cannot bring a new
+# setuid binary in without someone reading this:
+#   sudo                        the operator's way to root
+#   unix_chkpwd                 PAM's password check, which sudo's PAM stack uses
+#   dbus-daemon-launch-helper   D-Bus system service activation
+MICRODUCK_SETUID_ALLOWED = " \
+    ${bindir}/sudo \
+    ${sbindir}/unix_chkpwd \
+    ${libexecdir}/dbus-daemon-launch-helper \
+"
+ROOTFS_POSTPROCESS_COMMAND += "microduck_setuid_allowlist"
+microduck_setuid_allowlist() {
+	find ${IMAGE_ROOTFS} -xdev -type f -perm /6000 | while read -r f; do
+		case " ${MICRODUCK_SETUID_ALLOWED} " in
+		*" ${f#${IMAGE_ROOTFS}} "*) continue ;;
+		esac
+		bbnote "dropping setuid/setgid: ${f#${IMAGE_ROOTFS}}"
+		chmod u-s,g-s "$f"
+	done
+}
+
 IMAGE_INSTALL:append = " \
+    microduck-hardening \
     microduck-daemon \
     microduck-daemon-padd \
     microduck-board \
