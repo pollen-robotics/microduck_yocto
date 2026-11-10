@@ -49,7 +49,11 @@ the fresh flash showed the loss.
 
 So `boot.img` is the Android header plus the resource section, **with no
 kernel**: the kernel recipe rebuilds it with an empty kernel
-(`microduck_boot_img_dtb_only`), about 0.2 MiB in a 4 MiB partition. (#98 removed
+(`microduck_boot_img_dtb_only`), about 0.2 MiB in a 4 MiB partition. **Not yet
+verified on a fresh flash:** the one DTB-only `boot` that booted (2026-11-09) was
+written onto a board whose environment already held `serial#`. That it brings the
+serial back is the reasoning above, until a fresh flash of a build with it shows
+`/proc/device-tree/serial-number` and a Wi-Fi MAC that holds across reboots. (#98 removed
 `boot` entirely and a fresh flash reset before Linux; that build also hard-coded
 the slot numbers, and its cause was never found. Reverted in #105.)
 `check-wks-layout.py` fails a wks without `boot`.
@@ -74,7 +78,10 @@ it and to the `boot` partition's kernel, which did not match the slot's modules;
 `boot` now has none).
 A slot whose kernel does not load or boot has its counter zeroed and the board
 resets onto the next slot in `BOOT_ORDER`; with that slot alone in `BOOT_ORDER`
-U-Boot stops instead of looping, and a power cycle tries again. Traps:
+U-Boot stops instead of looping, and a power cycle tries again. With no kernel in
+either slot it gives up on the first, marks it (`rauc_nokernel` in the
+environment), and stops on the second rather than reset into "no slot has attempts
+left" and round again for ever. Traps:
 
 - **By GUID, not label or number.** `ext4load` takes `mmc <dev>:<part>`, and this
   U-Boot has no `part number`, so the script walks partitions 1-12 with

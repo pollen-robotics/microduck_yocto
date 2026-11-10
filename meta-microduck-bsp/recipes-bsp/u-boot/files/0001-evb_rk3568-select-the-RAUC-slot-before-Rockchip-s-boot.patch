@@ -33,16 +33,19 @@ A slot whose
 kernel does not load or boot has its counter zeroed and the board resets
 onto the next slot in BOOT_ORDER. With BOOT_ORDER naming that slot alone
 there is nothing to reset onto, so it stops rather than loop, rewriting the
-environment, until the power is pulled.
+environment, until the power is pulled. Likewise when no slot has a kernel:
+giving up sets rauc_nokernel, and a second slot without a kernel while it is
+set stops (and clears it) instead of resetting into the counter reset and
+round again. A kernel that loads clears it.
 
 Upstream-Status: Inappropriate [microduck RAUC integration]
 ---
- include/configs/evb_rk3568.h | 97 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 96 insertions(+), 1 deletion(-)
+ include/configs/evb_rk3568.h | 109 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 108 insertions(+), 1 deletion(-)
 
 --- a/include/configs/evb_rk3568.h
 +++ b/include/configs/evb_rk3568.h
-@@ -19,8 +19,103 @@
+@@ -19,8 +19,115 @@
  
  #define CONFIG_SYS_MMC_ENV_DEV		0
  
@@ -116,6 +119,12 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 + * to reset onto, and resetting anyway would loop every few seconds, writing the
 + * environment each time, until someone pulls the power. So it stops instead; a
 + * power cycle tries again, spending one attempt as any boot does.
++ *
++ * The same holds when no slot has a kernel: giving up on A, then on B, then finding
++ * every counter spent and resetting them would loop too. So giving up leaves a mark
++ * (rauc_nokernel), and a slot that also has no kernel while it is set stops instead,
++ * clearing it so a power cycle tries both slots once more. A kernel that loads
++ * clears it before booting.
 + */
 +#define MICRODUCK_ROOTFS_A_GUID "614e0000-0000-4b53-8000-1d28000054a9"
 +#define MICRODUCK_ROOTFS_B_GUID "614e0001-0000-4b53-8000-1d28000054a9"
@@ -132,13 +141,19 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 +	"if test -n \"${rauc_partnum}\" && " \
 +	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${kernel_addr_r} /boot/Image && " \
 +	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${fdt_addr_r} /boot/microduck.dtb; then " \
++		"if test -n \"${rauc_nokernel}\"; then setenv rauc_nokernel; saveenv; fi; " \
 +		"echo \"RAUC: kernel from ${rauc_part}\"; booti ${kernel_addr_r} - ${fdt_addr_r}; " \
 +	"fi; " \
 +	"if test \"x${BOOT_ORDER}\" = \"x${rauc_slot}\"; then " \
 +		"echo \"RAUC: no bootable kernel in ${rauc_part} and no other slot to boot; stopping\"; " \
 +	"else " \
-+		"echo \"RAUC: no bootable kernel in ${rauc_part}, giving up on slot ${rauc_slot}\"; " \
-+		"setenv BOOT_${rauc_slot}_LEFT 0; saveenv; reset; " \
++		"if test -n \"${rauc_nokernel}\"; then " \
++			"echo \"RAUC: no bootable kernel in ${rauc_part} either; stopping\"; " \
++			"setenv rauc_nokernel; saveenv; " \
++		"else " \
++			"echo \"RAUC: no bootable kernel in ${rauc_part}, giving up on slot ${rauc_slot}\"; " \
++			"setenv BOOT_${rauc_slot}_LEFT 0; setenv rauc_nokernel 1; saveenv; reset; " \
++		"fi; " \
 +	"fi; "
 +
  #undef CONFIG_BOOTCOMMAND

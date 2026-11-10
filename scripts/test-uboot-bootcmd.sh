@@ -70,7 +70,7 @@ SELECT="$("$work/gen" select | stub_saveenv) echo AFTER_SELECT;"
 # booti does not exist on the sandbox (not arm64): stub it with a marker and reset,
 # which ends the process as a real booti would.
 BOOTCMD=$("$work/gen" | stub_saveenv |
-	sed -e 's/booti \${kernel_addr_r} - \${fdt_addr_r};/echo BOOTI_FROM_PART ${rauc_partnum}; reset;/')
+	sed -e 's/booti \${kernel_addr_r} - \${fdt_addr_r};/echo BOOTI_FROM_PART ${rauc_partnum} nokernel=${rauc_nokernel}.; reset;/')
 [ -n "$BOOTCMD" ] || { echo "could not extract the boot script from $PATCH"; exit 1; }
 grep -qF BOOTI_FROM_PART <<< "$BOOTCMD" || { echo "booti stub did not apply; $PATCH changed shape"; exit 1; }
 grep -qF 'giving up on slot' <<< "$BOOTCMD" || { echo "no-kernel path not extracted; $PATCH changed shape"; exit 1; }
@@ -190,7 +190,7 @@ else fail=$((fail + 1)); echo "FAIL A pinned and spent: resets, never boots B"; 
 # variant: BOOTCMD as on the board, NORESET to print the counters left behind.
 boot_case() {  # name, card, env setup, then expected / forbidden (!-prefixed) substrings
 	local name=$1 card=$2 setup=$3 out ok=1; shift 3
-	out=$("$SANDBOX" -c "$(dev "$card") $setup ${CMD:-$BOOTCMD} printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT" 2>&1) || true
+	out=$("$SANDBOX" -c "$(dev "$card") $setup ${CMD:-$BOOTCMD} printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT rauc_nokernel" 2>&1) || true
 	for want in "$@"; do
 		case "$want" in
 		!*) grep -qF -- "${want#!}" <<< "$out" && { ok=0; echo "     unexpected: ${want#!}"; } ;;
@@ -224,9 +224,21 @@ boot_case "B has no kernel: gives up and resets, boots nothing" a-only \
 # A's is untouched and BOOT_ORDER is left to RAUC.
 CMD=$NORESET boot_case "B has no kernel: zeroes and saves B, next boot is A" a-only \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
-	"SAVEENV_CALLED" "RESET_CALLED" "BOOT_ORDER=B A" "BOOT_A_LEFT=3" "BOOT_B_LEFT=0" "!BOOTI_FROM_PART"
+	"SAVEENV_CALLED" "RESET_CALLED" "BOOT_ORDER=B A" "BOOT_A_LEFT=3" "BOOT_B_LEFT=0" "rauc_nokernel=1" "!BOOTI_FROM_PART"
 CMD=$NORESET boot_case "no kernel anywhere: gives up on A first" none "setenv BOOT_ORDER 'A B';" \
-	"giving up on slot A" "BOOT_A_LEFT=0" "BOOT_B_LEFT=3" "!BOOTI_FROM_PART"
+	"giving up on slot A" "BOOT_A_LEFT=0" "BOOT_B_LEFT=3" "rauc_nokernel=1" "!BOOTI_FROM_PART"
+# ... then, after that reset, B has none either: it stops rather than give up on B
+# too, reset into "no slot has attempts left", restore both counters and go round
+# again for ever. The mark is cleared, so a power cycle tries both once more.
+CMD=$NORESET boot_case "no kernel anywhere, A already given up: stops on B, no loop" none \
+	"setenv BOOT_ORDER 'A B'; setenv BOOT_A_LEFT 0; setenv BOOT_B_LEFT 3; setenv rauc_nokernel 1;" \
+	"no bootable kernel in rootfs_b either; stopping" "BOOT_B_LEFT=0x2" "!RESET_CALLED" "!giving up" \
+	"!rauc_nokernel=1" "!BOOTI_FROM_PART"
+# A kernel that loads clears the mark before booting, so a later slot without a
+# kernel is given up on as usual rather than taken for the second of a pair.
+boot_case "B given up, A has a kernel: the mark is cleared before booting A" a-only \
+	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 0; setenv rauc_nokernel 1;" \
+	"BOOTI_FROM_PART 5 nokernel=." "!nokernel=1"
 # A one-slot order (every board once a trial ends): nothing to reset onto, so it
 # stops -- no zeroing, no second saveenv, no reset -- instead of looping.
 CMD=$NORESET boot_case "A alone in BOOT_ORDER without a kernel: stops, no loop" none "" \
