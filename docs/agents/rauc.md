@@ -31,40 +31,61 @@ distro_bootcmd;`. Called `boot_a`, the card flashes perfectly, RKNS is at sector
 64, a valid `ANDROID!` image sits in the slot, and the board never loads a kernel:
 no wifi, no BLE, looks dead.
 
-**And `boot` must exist even though the kernel comes from the slot.** Vendor
-U-Boot reads its *own* device tree from it at init (`init_kernel_dtb()`, long
-before the boot script), from the `rk-kernel.dtb` entry of the Rockchip resource
-section after the kernel. Without the partition a beta board resets before Linux
-(#98, reverted in #105); with a `boot` holding only the header and that resource,
-no kernel, a beta booted normally (2026-11-09). `check-wks-layout.py` fails a wks
-without it.
+That was the vendor chain. Ours no longer runs it (next section), **but `boot`
+must still exist, holding U-Boot's own device tree.** Vendor U-Boot reads it at
+init (`init_kernel_dtb()`, long before the boot script), from the `rk-kernel.dtb`
+entry of the Rockchip resource section, and sets itself up from it. Without it,
+it falls back to a generic built-in tree that cannot reach the OTP, so
+`rockchip_set_serialno()` (`arch/arm/mach-rockchip/board.c`) gets no serial. Measured on a beta,
+2026-11-10: a fresh flash with no `boot` booted, with no
+`/proc/device-tree/serial-number`, an empty `serial#`, and a Wi-Fi MAC that
+changed on every boot. The serial feeds the USB gadget's MACs too
+(`microduck-usb-gadget`), and the Zero 3W's robot identity (`robotd-params`).
 
-**The 2026-11-09 layout** dropped `boot_b` (reserved for a kernel A/B that never
-came: the kernel moved into the slots instead), moved the slots up to 48 MiB,
-made them 4 GiB, and made `data` 1 GiB in the image, grown to the end of the disk
-on first boot by `microduck-data-grow` (`recipes-core/microduck-data`). The slot
-size is the ceiling for every OS update a shipped robot takes; the table never
-changes after flashing.
+**Test this from a fresh flash only.** Our bootcmd's `saveenv` stores `serial#`
+in the environment with everything else, so a board that once booted with `boot`
+keeps its serial after `boot` is zeroed or deleted. Two such tests passed before
+the fresh flash showed the loss.
+
+So `boot.img` is the Android header plus the resource section, **with no
+kernel**: the kernel recipe rebuilds it with an empty kernel
+(`microduck_boot_img_dtb_only`), about 0.2 MiB in a 4 MiB partition. (#98 removed
+`boot` entirely and a fresh flash reset before Linux; that build also hard-coded
+the slot numbers, and its cause was never found. Reverted in #105.)
+`check-wks-layout.py` fails a wks without `boot`.
+
+**The 2026-11-09/10 layout** dropped `boot_b` (reserved for a kernel A/B that
+never came: the kernel moved into the slots instead), shrank `boot` to 4 MiB with
+no kernel, kept the slots at 48 MiB (20..48 MiB unallocated), made them 4 GiB,
+and made `data` 1 GiB in the image, grown to the end of the disk on first boot by
+`microduck-data-grow` (`recipes-core/microduck-data`). The slot size is the
+ceiling for every OS update a shipped robot takes; the table never changes after
+flashing.
 
 ## The kernel is in the slot (2026-10-16)
 
 Each rootfs carries `/boot/Image` and `/boot/microduck.dtb` (a symlink to the
 machine's DTB, so one bootcmd serves both boards). After picking the slot,
-U-Boot's script `ext4load`s both from that slot's partition and `booti`s them;
-only when they are missing does it fall through to Rockchip's chain and the
-`boot` partition, which stays as that fallback. So a bundle carries the kernel,
-DTB and modules together, and a kernel or toolchain change is an ordinary update
-instead of a reflash. Traps:
+U-Boot's script `ext4load`s both from that slot's partition and `booti`s them.
+So a bundle carries the kernel, DTB and modules together, and a kernel or
+toolchain change is an ordinary update instead of a reflash. Rockchip's chain is
+not run at all (since 2026-11-10; before, a slot without a kernel fell through to
+it and to the `boot` partition's kernel, which did not match the slot's modules;
+`boot` now has none).
+A slot whose kernel does not load or boot has its counter zeroed and the board
+resets onto the next slot in `BOOT_ORDER`; with that slot alone in `BOOT_ORDER`
+U-Boot stops instead of looping, and a power cycle tries again. Traps:
 
 - **By GUID, not label or number.** `ext4load` takes `mmc <dev>:<part>`, and this
   U-Boot has no `part number`, so the script walks partitions 1-12 with
   `part uuid` and takes the one whose GPT partition GUID is the slot's (fixed in
-  the wks: `614e0000-…` for A, `614e0001-…` for B). The numbers moved when
-  `boot_b` went (6/7 before, 5/6 now); looking them up keeps one U-Boot right on
-  both, so `flash-emmc.sh recover` with a new U-Boot still boots an older card.
-  No GUID found means no partition is guessed: the slot falls through as one
-  without a kernel. `check-wks-layout.py` compares the GUIDs in the wks with the
-  boot script, and `test-uboot-bootcmd.sh` runs both layouts.
+  the wks: `614e0000-…` for A, `614e0001-…` for B). The numbers differ between
+  layouts (6/7 with `boot` and `boot_b`, 5/6 now, 4/5 on a card flashed by a
+  #98 build); looking them up keeps one U-Boot right on all of them, so `flash-emmc.sh
+  recover` with a new U-Boot still boots an older card. No GUID found means no
+  partition is guessed: the slot is handled as one without a kernel.
+  `check-wks-layout.py` compares the GUIDs in the wks with the boot script, and
+  `test-uboot-bootcmd.sh` runs every layout.
 - **The bundle hook checks the bootcmd U-Boot will run**, from `fw_printenv`, not
   the U-Boot binary: a saved environment keeps its bootcmd, and a card that kept
   an old environment would boot the `boot` partition's kernel against the slot's

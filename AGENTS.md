@@ -60,13 +60,15 @@ you didn't look. This repo already has a scar for each:
   of `boot_android ...;boot_fit;bootrkp;run distro_bootcmd;`. Rename that
   partition and the card flashes perfectly, verifies perfectly, and never loads a
   kernel — no wifi, no BLE, looks dead. It cost a flash. `docs/agents/rauc.md`.
-  Removing it outright (#98) was reverted too: a fresh flash of that layout on
-  a beta board picked slot A, then reset itself with no LED ever lit, while the
-  same rootfs installed by OTA over the old layout booted. U-Boot reads its own
-  DTB from `boot` at init; try `CONFIG_EMBED_KERNEL_DTB` before removing it again.
-  What it needs from `boot` is that DTB, not the kernel: a `boot` holding only
-  the header and the resource section booted a beta (2026-11-09). The slots are
-  found by partition GUID, not number (`docs/agents/rauc.md`).
+  That chain is no longer run: our boot script boots the kernel in the chosen
+  slot, which it finds by partition GUID, not number (`docs/agents/rauc.md`).
+  **But `boot` must stay**, because U-Boot reads its *own* DTB from it at init.
+  Without it a fresh flash still boots, with no `serial-number` and a Wi-Fi MAC
+  that changes every boot (beta, 2026-11-10). So since 2026-11-10 `boot` is
+  4 MiB and holds only that DTB, no kernel. Testing it on a board that already
+  ran hides this: the serial survives in U-Boot's saved environment. Only a
+  fresh flash shows it. (#98 removed `boot` and a fresh flash then reset
+  before Linux; that build's cause was never found, and it was reverted.)
 - **In Loader mode, `rkdeveloptool rl` returns `0xCC` past 32 MiB.** Vendor
   U-Boot's rockusb refuses reads beyond `RKUSB_READ_LIMIT_ADDR` (`cmd/rockusb.c`)
   and fills the buffer instead; writes are not limited. It reads exactly like

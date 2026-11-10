@@ -20,12 +20,11 @@ WKS = Path(__file__).resolve().parent.parent / "meta-microduck-bsp/files/wic/mic
 # name -> measured bytes of the artifact that must fit (2026-09-17).
 #
 # Keyed by the wks --part-name, so this list moves whenever a partition is
-# renamed. `boot` rather than `boot_a` because vendor U-Boot finds the kernel by
-# that exact GPT name -- see the comment on the part line in the wks.
+# renamed. The kernel is not here: it lives in each rootfs slot's /boot.
 ARTIFACTS = {
     "idblock": 313344,     # idblock.img
     "uboot": 4 << 20,      # uboot.img, exactly 4 MiB
-    "boot": 17004544,      # boot.img (kernel + resource with the DTB U-Boot reads)
+    "boot": 206848,        # boot.img: header + resource with the DTB U-Boot reads, no kernel (2026-11-10)
 }
 
 UNITS = {"s": 512, "S": 512, "K": 1024, "k": 1024, "M": 1 << 20, "G": 1 << 30}
@@ -151,8 +150,8 @@ def main():
             errors.append(f"{name} has GUID {guids[name]} in the wks, but the boot script "
                           f"looks for {m.group(1)}")
     names = [n for n, _, _ in parts]
-    # Vendor U-Boot reads its own DTB from the partition named exactly `boot` at init,
-    # before any boot script: without it a beta board resets before Linux (#98).
+    # Vendor U-Boot reads its own DTB from the partition named exactly `boot` at init:
+    # without it a fresh flash has no serial-number and a random Wi-Fi MAC.
     if "boot" not in names:
         errors.append("boot: missing -- vendor U-Boot reads its own DTB from it at init")
     # microduck-data-grow grows data to the end of the disk only if it is the last one.

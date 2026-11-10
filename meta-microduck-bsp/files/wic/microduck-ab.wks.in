@@ -7,7 +7,8 @@
 #   v_storage    3584 KiB     256 KiB   Rockchip vendor storage (MAC, serial)
 #   uboot_env    4064 KiB      32 KiB   = 0x3F8000, the default environment
 #   uboot           8 MiB       4 MiB
-#   boot           16 MiB      32 MiB   U-Boot's own DTB (+ fallback kernel); each slot has its own
+#   boot           16 MiB       4 MiB   U-Boot's own DTB, no kernel (each slot has its own)
+#   (unallocated)  20 MiB      28 MiB
 #   rootfs_a       48 MiB       4 GiB
 #   rootfs_b     4144 MiB       4 GiB   same rootfs as A; RAUC rewrites it
 #   data         8240 MiB       1 GiB   /var/lib/robot, survives updates; grown to the
@@ -48,11 +49,15 @@ part --source rawcopy --sourceparams="file=u-boot-initial-env.bin" --offset 8128
 
 part --source rawcopy --sourceparams="file=uboot.img" --offset 8M --fixed-size 4M --part-name uboot
 
-# U-Boot reads its own DTB from here at init (init_kernel_dtb, before any boot
-# script), so it must exist and be named exactly `boot`: without it a beta board
-# resets before Linux (#98, reverted). The kernel in it is only a fallback for a
-# slot without its own; a `boot` holding the DTB and no kernel booted a beta fine.
-part --source rawcopy --sourceparams="file=boot.img" --offset 16M --fixed-size 32M --part-name boot
+# U-Boot's own DTB, and nothing else. Vendor U-Boot sets itself up from the
+# rk-kernel.dtb in this partition at init (init_kernel_dtb, before any boot script),
+# found by the exact name `boot`. Without it, it falls back to a generic tree that
+# cannot read the OTP: a fresh flash then has no serial-number and a Wi-Fi MAC that
+# changes every boot (beta, 2026-11-10). boot.img has no kernel (the kernel recipe
+# builds it so): U-Boot boots only the slot's, and a slot without one is given up
+# on (the U-Boot patch). ~0.2 MiB used. 20..48 MiB stays unallocated, so the slots
+# keep their offsets.
+part --source rawcopy --sourceparams="file=boot.img" --offset 16M --fixed-size 4M --part-name boot
 
 # The kernel's root= comes from U-Boot's boot script (root=PARTLABEL=rootfs_a|b).
 # The GUIDs are how that script finds each slot's partition (above), and they keep
@@ -62,10 +67,11 @@ part / --source rootfs --offset 48M --fixed-size 4096M --fstype=ext4 --part-name
 #
 # rootfs_b gets the same rootfs as rootfs_a, so a freshly flashed board has two
 # bootable slots. U-Boot's script falls back to B once A has used its attempts
-# (three boots without rauc-mark-good, e.g. three quick reboots); with B empty
-# U-Boot finds no kernel there, falls back to `boot`, and that kernel panics on an
-# empty root -- the board looks bricked until the counters wrap. Seen on the first
-# beta board, 2026-10-06. Costs one more 2 GiB write at flash time.
+# (three boots without rauc-mark-good, e.g. three quick reboots). With B empty it
+# used to fall back to the `boot` partition, whose kernel panicked on an empty
+# root -- the board looked bricked until the counters wrapped (first beta board,
+# 2026-10-06). Without that partition an empty B is skipped, but a fresh board
+# should still have two slots that boot. Costs one more write at flash time.
 part --source rootfs --offset 4144M --fixed-size 4096M --fstype=ext4 --part-name rootfs_b --uuid 614e0001-0000-4b53-8000-1d28000054a9 --mkfs-extraopts "${RK_ROOTFS_EXTRAOPTS}"
 
 # User data: policies, sounds, configd state, wifi profiles. Seeded from the image's
