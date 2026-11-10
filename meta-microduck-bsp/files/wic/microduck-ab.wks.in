@@ -52,8 +52,8 @@ part --source rawcopy --sourceparams="file=uboot.img" --offset 8M --fixed-size 4
 # U-Boot's own DTB, and nothing else. Vendor U-Boot sets itself up from the
 # rk-kernel.dtb in this partition at init (init_kernel_dtb, before any boot script),
 # found by the exact name `boot`. Without it, it falls back to a generic tree that
-# cannot read the OTP: a fresh flash then has no serial-number and a Wi-Fi MAC that
-# changes every boot (beta, 2026-11-10). Its image has no kernel (the kernel recipe
+# cannot read the OTP: a fresh flash then has no serial-number (beta, 2026-11-10;
+# with this partition it is back on a fresh flash). Its image has no kernel (the kernel recipe
 # builds it so): U-Boot boots only the slot's, and a slot without one is given up
 # on (the U-Boot patch). ~0.2 MiB used. 20..48 MiB stays unallocated, so the slots
 # keep their offsets.

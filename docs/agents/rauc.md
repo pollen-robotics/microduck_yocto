@@ -38,9 +38,14 @@ entry of the Rockchip resource section, and sets itself up from it. Without it,
 it falls back to a generic built-in tree that cannot reach the OTP, so
 `rockchip_set_serialno()` (`arch/arm/mach-rockchip/board.c`) gets no serial. Measured on a beta,
 2026-11-10: a fresh flash with no `boot` booted, with no
-`/proc/device-tree/serial-number`, an empty `serial#`, and a Wi-Fi MAC that
-changed on every boot. The serial feeds the USB gadget's MACs too
-(`microduck-usb-gadget`), and the Zero 3W's robot identity (`robotd-params`).
+`/proc/device-tree/serial-number` and an empty `serial#`. The serial feeds the USB
+gadget's MACs (`microduck-usb-gadget`: the same on every robot without it) and the
+Zero 3W's robot identity (`robotd-params`).
+
+Not the Wi-Fi MAC, though it looked like it: the chip's permanent address is fixed
+(`ip link` shows it as `permaddr`), and what changes on every boot of a fresh flash
+is NetworkManager's random scanning MAC (`addr_assign_type` 3), used while no Wi-Fi
+network is configured, with or without `boot`.
 
 **Test this from a fresh flash only.** Our bootcmd's `saveenv` stores `serial#`
 in the environment with everything else, so a board that once booted with `boot`
@@ -49,11 +54,11 @@ the fresh flash showed the loss.
 
 So `boot.img` is the Android header plus the resource section, **with no
 kernel**: the kernel recipe rebuilds it with an empty kernel
-(`microduck_boot_img_dtb_only`), about 0.2 MiB in a 4 MiB partition. **Not yet
-verified on a fresh flash:** the one DTB-only `boot` that booted (2026-11-09) was
-written onto a board whose environment already held `serial#`. That it brings the
-serial back is the reasoning above, until a fresh flash of a build with it shows
-`/proc/device-tree/serial-number` and a Wi-Fi MAC that holds across reboots. (#98 removed
+(`microduck_boot_img_dtb_only`), about 0.2 MiB in a 4 MiB partition. Verified on
+a fresh flash of a beta (2026-11-10, build 6af2f3c3): `serial-number` and `serial#`
+back (the same value the board had before), the USB MAC back to its old value, and
+then an update into slot B, `reboot loader`, and a slot with no kernel given up
+on in favour of the other. (#98 removed
 `boot` entirely and a fresh flash reset before Linux; that build also hard-coded
 the slot numbers, and its cause was never found. Reverted in #105.)
 `check-wks-layout.py` fails a wks without `boot`.

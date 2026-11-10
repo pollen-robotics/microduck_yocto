@@ -158,7 +158,7 @@ def main():
                           f"looks for {m.group(1)}")
     names = [n for n, _, _ in parts]
     # Vendor U-Boot reads its own DTB from the partition named exactly `boot` at init:
-    # without it a fresh flash has no serial-number and a random Wi-Fi MAC.
+    # without it a fresh flash has no serial-number.
     if "boot" not in names:
         errors.append("boot: missing -- vendor U-Boot reads its own DTB from it at init")
     # microduck-data-grow grows data to the end of the disk only if it is the last one.

@@ -51,8 +51,8 @@ SRC_URI = " \
 # boot.img without a kernel: the Android header and resource.img, which carries the
 # board DTB (rk-kernel.dtb). That DTB is all the `boot` partition is for: vendor
 # U-Boot sets itself up from it at init, and without it falls back to a generic
-# tree that cannot read the OTP -- no serial-number, and a Wi-Fi MAC that changes
-# every boot (beta, 2026-11-10). The kernel comes from the slot, so one here would
+# tree that cannot read the OTP -- no serial-number, so the USB gadget's MACs are
+# the same on every robot (beta, 2026-11-10). The kernel comes from the slot, so one here would
 # only be a fallback that does not match the slot's modules. mkimg built both
 # boot.img and zboot.img, and meta-rockchip deploys zboot.img under the name
 # boot.img (ROCKCHIP_KERNEL_COMPRESSED), so both are replaced. Same mkbootimg,
