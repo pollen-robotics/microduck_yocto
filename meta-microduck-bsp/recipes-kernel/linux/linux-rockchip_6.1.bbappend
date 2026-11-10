@@ -38,9 +38,30 @@ SRC_URI = " \
     file://cgroups.cfg \
     file://mali-csf.cfg \
     file://no-mali400.cfg \
+    file://no-mali-gpu.cfg \
     file://qemu-virt.cfg \
     file://rauc.cfg \
     file://watchdog.cfg \
+"
+
+# Kernel CVE backports, ahead of Armbian moving rk-6.1-rkr7.2 past 6.1.172: the
+# known-exploited (CISA KEV 2026.11.09) and likeliest-exploited (FIRST EPSS)
+# kernel CVEs our scan found open, each fixed by one 6.1 stable commit. Each
+# patch is that commit as is, plus CVE: and Upstream-Status: Backport tags; the
+# CVE: tag is what makes the scan count it patched.
+#   0010  CVE-2026-46300  KEV   net/core/skbuff.c             6.1.174
+#   0011  CVE-2026-53266  KEV   net/bridge/netfilter/ebt_snat 6.1.176
+#   0012  CVE-2026-53362  KEV   net/ipv6/ip6_output.c         6.1.177
+#   0013  CVE-2026-43499  EPSS  kernel/locking/rtmutex.c      6.1.175
+#   0014  CVE-2025-21759  EPSS  net/ipv6/mcast.c              6.1.189
+# When SRCREV reaches a stable release that carries one, drop its patch: it will
+# no longer apply.
+SRC_URI += " \
+    file://0010-net-skbuff-preserve-shared-frag-marker-during-coalescing.patch \
+    file://0011-netfilter-bridge-make-ebt-snat-ARP-rewrite-writable.patch \
+    file://0012-ipv6-account-for-fraggap-on-the-paged-allocation-path.patch \
+    file://0013-rtmutex-Use-waiter-task-instead-of-current-in.patch \
+    file://0014-ipv6-mcast-extend-RCU-protection-in-igmp6-send.patch \
 "
 
 # Reproducible boot.img: microduck-bundle refuses a bundle whose boot.img differs from the card's.
