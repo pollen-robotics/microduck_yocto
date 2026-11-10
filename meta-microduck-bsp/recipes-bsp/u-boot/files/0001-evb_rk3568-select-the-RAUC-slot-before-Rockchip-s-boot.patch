@@ -1,12 +1,11 @@
 From 023c5b24a76dd133c70ee4731bd971c42b1f41ed Mon Sep 17 00:00:00 2001
 From: Fabien Danieau <fabien.danieau@pollen-robotics.com>
 Date: Fri, 25 Sep 2026 17:15:39 +0200
-Subject: [PATCH] evb_rk3568: select the RAUC slot before Rockchip's boot chain
+Subject: [PATCH] evb_rk3568: select the RAUC slot and boot its own kernel
 
-Prepend an A/B selection to CONFIG_BOOTCOMMAND: walk BOOT_ORDER, take the first
-bootname whose BOOT_<name>_LEFT is not "0", decrement and save it, and set
-bootargs to root=PARTLABEL=rootfs_<a|b> rauc.slot=<A|B>. Then fall through to
-the unchanged RKIMG_BOOTCOMMAND.
+Replace CONFIG_BOOTCOMMAND with an A/B selection: walk BOOT_ORDER, take the
+first bootname whose BOOT_<name>_LEFT is not "0", decrement and save it, and
+set bootargs to root=PARTLABEL=rootfs_<a|b> rauc.slot=<A|B>.
 
 It has to be this header, not Kconfig: this file #undefs CONFIG_BOOTCOMMAND
 and redefines it, so a CONFIG_BOOTCOMMAND in a defconfig fragment is silently
@@ -23,25 +22,32 @@ and silently moved the board to B. Put "A B" back when that is fixed --
 pollen-robotics/microduck_yocto#24.
 
 Then boot the kernel and DTB in the chosen slot's own /boot (ext4load,
-booti), so a RAUC bundle carries its kernel; only a slot without them falls
-through to RKIMG_BOOTCOMMAND and the `boot` partition. The slot's partition
-is found by its GPT partition GUID (fixed in the wks) with `part uuid`, not
-by number: the numbers moved when boot_b was dropped from the layout, and
-looking them up keeps this U-Boot right on both the old and the new layout.
+booti), so a RAUC bundle carries its kernel. The slot's partition is found
+by its GPT partition GUID (fixed in the wks) with `part uuid`, not by
+number: the numbers differ between the layouts boards were flashed with,
+and looking them up keeps this U-Boot right on all of them.
+
+Rockchip's chain (RKIMG_BOOTCOMMAND) is no longer run: all it could boot is
+the `boot` partition's kernel, and `boot` now carries only U-Boot's own DTB.
+A slot whose
+kernel does not load or boot has its counter zeroed and the board resets
+onto the next slot in BOOT_ORDER. With BOOT_ORDER naming that slot alone
+there is nothing to reset onto, so it stops rather than loop, rewriting the
+environment, until the power is pulled.
 
 Upstream-Status: Inappropriate [microduck RAUC integration]
 ---
- include/configs/evb_rk3568.h | 82 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 81 insertions(+), 1 deletion(-)
+ include/configs/evb_rk3568.h | 97 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 96 insertions(+), 1 deletion(-)
 
 --- a/include/configs/evb_rk3568.h
 +++ b/include/configs/evb_rk3568.h
-@@ -19,8 +19,88 @@
+@@ -19,8 +19,103 @@
  
  #define CONFIG_SYS_MMC_ENV_DEV		0
  
 +/*
-+ * microduck: RAUC A/B slot selection, run before Rockchip's own boot chain.
++ * microduck: RAUC A/B slot selection, in place of Rockchip's own boot chain.
 + * Picks the first bootname in BOOT_ORDER whose BOOT_<name>_LEFT is not zero,
 + * decrements and saves it, and points the kernel at that slot. Adapted from RAUC's
 + * contrib/uboot.sh; docs/agents/rauc.md has the full reasoning. Three traps:
@@ -91,15 +97,25 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 +/*
 + * microduck: boot the kernel and DTB that live in the chosen slot's rootfs, so a
 + * RAUC bundle carries its own kernel and an update can change it. /boot/microduck.dtb
-+ * is the machine's DTB under one name, so one U-Boot serves both boards. A slot
-+ * without them falls through to Rockchip's chain and the kernel in the `boot`
-+ * partition, as before.
++ * is the machine's DTB under one name, so one U-Boot serves both boards.
 + *
 + * The slot's partition is found by its GPT partition GUID, fixed in the wks, not by
 + * number: this tree has no `part number` and ext4load wants one, and the numbers
-+ * moved when boot_b went (rootfs 6/7 before, 5/6 after). Looking it up keeps one
-+ * U-Boot right on both layouts, so a U-Boot-only reflash of an older card still
-+ * boots. scripts/check-wks-layout.py checks the GUIDs against the wks.
++ * differ between layouts (rootfs 6/7 on cards flashed with boot and boot_b, 5/6
++ * since). Looking it up keeps one U-Boot right on every layout, so a U-Boot-only
++ * reflash of an older card still boots. scripts/check-wks-layout.py checks the GUIDs
++ * against the wks.
++ *
++ * There is no other kernel to fall back to, and Rockchip's chain (RKIMG_BOOTCOMMAND)
++ * is not run: all it could boot is a `boot` partition kernel, which `boot` no longer
++ * carries (it keeps only U-Boot's own DTB) and which on older cards does not match
++ * the slot's modules. A slot whose kernel will not
++ * load or boot spends its remaining attempts at once and the board resets, so the
++ * next boot takes the next slot in BOOT_ORDER -- the same path as a slot that never
++ * reaches rauc-mark-good. Unless BOOT_ORDER names this slot alone: there is nothing
++ * to reset onto, and resetting anyway would loop every few seconds, writing the
++ * environment each time, until someone pulls the power. So it stops instead; a
++ * power cycle tries again, spending one attempt as any boot does.
 + */
 +#define MICRODUCK_ROOTFS_A_GUID "614e0000-0000-4b53-8000-1d28000054a9"
 +#define MICRODUCK_ROOTFS_B_GUID "614e0001-0000-4b53-8000-1d28000054a9"
@@ -118,11 +134,16 @@ Upstream-Status: Inappropriate [microduck RAUC integration]
 +	"ext4load ${devtype} ${devnum}:${rauc_partnum} ${fdt_addr_r} /boot/microduck.dtb; then " \
 +		"echo \"RAUC: kernel from ${rauc_part}\"; booti ${kernel_addr_r} - ${fdt_addr_r}; " \
 +	"fi; " \
-+	"echo \"RAUC: no kernel in ${rauc_part}, falling back to the boot partition\"; "
++	"if test \"x${BOOT_ORDER}\" = \"x${rauc_slot}\"; then " \
++		"echo \"RAUC: no bootable kernel in ${rauc_part} and no other slot to boot; stopping\"; " \
++	"else " \
++		"echo \"RAUC: no bootable kernel in ${rauc_part}, giving up on slot ${rauc_slot}\"; " \
++		"setenv BOOT_${rauc_slot}_LEFT 0; saveenv; reset; " \
++	"fi; "
 +
  #undef CONFIG_BOOTCOMMAND
 -#define CONFIG_BOOTCOMMAND RKIMG_BOOTCOMMAND
-+#define CONFIG_BOOTCOMMAND MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT RKIMG_BOOTCOMMAND
++#define CONFIG_BOOTCOMMAND MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT
  
  #ifdef CONFIG_USB_FUNCTION_DFU
  #define CONFIG_SET_DFU_ALT_INFO
