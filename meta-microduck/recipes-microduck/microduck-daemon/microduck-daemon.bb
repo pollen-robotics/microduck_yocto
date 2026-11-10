@@ -294,6 +294,13 @@ do_install:append() {
 		[ -e "$b" ] || continue
 		mv "$b" ${D}/opt/robot/daemon/releases/${PV}/bin/
 	done
+
+	# The detector models the release tar ships under models/ (pick-up pause,
+	# petting detector). From ${S}, not a pinned copy: a detector's input is
+	# this loop's own feature row, so it must match the binaries' SRCREV.
+	install -d ${D}/opt/robot/daemon/releases/${PV}/models
+	install -m 0644 ${S}/duck-control/models/*.onnx ${S}/pet-detect/models/*.onnx \
+		${D}/opt/robot/daemon/releases/${PV}/models/
 	ln -snf releases/${PV} ${D}/opt/robot/daemon/current
 	ln -snf releases/${PV} ${D}/opt/robot/daemon/golden
 
