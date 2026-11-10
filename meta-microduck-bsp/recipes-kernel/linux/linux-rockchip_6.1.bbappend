@@ -38,6 +38,7 @@ SRC_URI = " \
     file://cgroups.cfg \
     file://mali-csf.cfg \
     file://no-mali400.cfg \
+    file://no-mali-gpu.cfg \
     file://qemu-virt.cfg \
     file://rauc.cfg \
     file://watchdog.cfg \
