@@ -65,7 +65,8 @@ you didn't look. This repo already has a scar for each:
   **But `boot` must stay**, because U-Boot reads its *own* DTB from it at init.
   Without it a fresh flash still boots, with no `serial-number` and a Wi-Fi MAC
   that changes every boot (beta, 2026-11-10). So since 2026-11-10 `boot` is
-  4 MiB and holds only that DTB, no kernel. Testing it on a board that already
+  4 MiB and holds only that DTB, no kernel (that this brings the serial back on
+  a fresh flash is not verified yet). Testing it on a board that already
   ran hides this: the serial survives in U-Boot's saved environment. Only a
   fresh flash shows it. (#98 removed `boot` and a fresh flash then reset
   before Linux; that build's cause was never found, and it was reverted.)

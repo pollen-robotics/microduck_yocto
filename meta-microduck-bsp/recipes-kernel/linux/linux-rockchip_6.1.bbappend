@@ -59,12 +59,9 @@ SRC_URI = " \
 # empty kernel: byte-identical to the DTB-only image a beta booted.
 microduck_boot_img_dtb_only() {
 	[ -s "${B}/resource.img" ] || bbfatal "no resource.img in ${B}: mkimg changed"
-	: > "${B}/microduck-no-kernel"
 	for img in boot.img zboot.img; do
-		"${S}/scripts/mkbootimg" --kernel "${B}/microduck-no-kernel" \
-			--second "${B}/resource.img" -o "${B}/$img"
+		"${S}/scripts/mkbootimg" --kernel /dev/null --second "${B}/resource.img" -o "${B}/$img"
 	done
-	rm -f "${B}/microduck-no-kernel"
 }
 do_compile[postfuncs] += "microduck_boot_img_dtb_only"
 
