@@ -294,6 +294,24 @@ do_install:append() {
 		[ -e "$b" ] || continue
 		mv "$b" ${D}/opt/robot/daemon/releases/${PV}/bin/
 	done
+
+	# The data files robotd reads from its release tree. This mirrors the runtime
+	# --include lines of the daemon's .github/workflows/_build-release.yml, which
+	# nothing checks: a file added there and missed here is absent only on freshly
+	# flashed robots (an update extracts the official tar), so keep them in step.
+	#
+	# The detector models (pick-up pause, petting detector). From ${S}, not a
+	# pinned copy: a detector's input is this loop's own feature row, so it must
+	# match the binaries' SRCREV.
+	install -d ${D}/opt/robot/daemon/releases/${PV}/models
+	install -m 0644 ${S}/duck-control/models/*.onnx ${S}/pet-detect/models/*.onnx \
+		${D}/opt/robot/daemon/releases/${PV}/models/
+	# The shipped emotions. robotd says nothing when this directory is missing --
+	# it just has none. Absent before daemon 0.18.8, hence the test.
+	if [ -d ${S}/robotd/emotions ]; then
+		install -d ${D}/opt/robot/daemon/releases/${PV}/emotions
+		install -m 0644 ${S}/robotd/emotions/* ${D}/opt/robot/daemon/releases/${PV}/emotions/
+	fi
 	ln -snf releases/${PV} ${D}/opt/robot/daemon/current
 	ln -snf releases/${PV} ${D}/opt/robot/daemon/golden
 
@@ -609,6 +627,12 @@ RRECOMMENDS:${PN}:append:aarch64 = " onnxruntime"
 # scripts/seed-policies.sh (v5 at 0.13.0 to 0.15.1, v7 from 0.15.2 to 0.16.1, v8 from
 # 0.16.2).
 RDEPENDS:${PN} += "microduck-policies"
+
+# The duck detector's model, seeded for the same reason as the policy set, so the
+# detector works offline from the first boot. RRECOMMENDS: the detector is off by
+# default and mediad runs fine without a model. Bump it with DETECTOR_VERSION in the
+# daemon's scripts/seed-detector.sh.
+RRECOMMENDS:${PN} += "microduck-detector"
 
 # RAUC marks a slot good only if the same check robot-boot-check makes passes:
 # its own recipe, installed wherever the daemon is.

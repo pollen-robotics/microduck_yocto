@@ -51,6 +51,27 @@ elif [ "$needs" != "$seeds" ]; then
 	exit 1
 fi
 
+# The same for the NPU runtime and the duck detector model, which the release pins
+# in its Cargo.toml. These mismatches fail quietly instead: a runtime older than
+# its model fails rknn_init, and mediad falls back to the CPU model -- measured at
+# 128% of one core against 8.7% on the NPU, beside robotd's 50 Hz loop.
+cargo=$(curl -fsSL "https://raw.githubusercontent.com/pollen-robotics/microduck_daemon/$srcrev/Cargo.toml") || cargo=
+pin() { printf '%s\n' "$cargo" | awk -F'"' -v s="[workspace.metadata.$1]" -v k="$2" '/^\[/{in_s=($0==s)} in_s && $1 ~ "^"k" *= *$"{print $2; exit}'; }
+recipe() { ls "$1" | sed -n "s/^$2_\(.*\)\.bb\$/\1/p"; }
+check_pin() { # <what> <daemon's pin> <the image's> <recipe to bump>
+	if [ -z "$2" ]; then
+		echo "$0: WARNING: could not read the $1 pin from daemon $version; not checking it" >&2
+	elif [ "$2" != "$3" ]; then
+		echo "$0: daemon $version pins $1 $2, the image ships $3." >&2
+		echo "  Bump $4, or name another daemon release." >&2
+		exit 1
+	fi
+}
+check_pin "NPU runtime" "$(pin rknpu runtime)" \
+	"v$(recipe meta-microduck-bsp/recipes-bsp/librknnrt librknnrt)" librknnrt
+check_pin "duck detector" "$(pin detector version)" \
+	"duck-$(recipe meta-microduck/recipes-microduck/microduck-detector microduck-detector)" microduck-detector
+
 echo "daemon: $version at $srcrev ($want)" >&2
 echo "MICRODUCK_DAEMON_VERSION=$version"
 echo "MICRODUCK_DAEMON_SRCREV=$srcrev"
