@@ -253,10 +253,16 @@ USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport a
 # SYSTEMD_PACKAGES has to name both, since it otherwise defaults to ${PN} alone
 # and padd.service would be installed but never enabled.
 #
+# duck-gateway is how the app reaches the camera and controls since 0.19.0:
+# mediad listens on loopback only, and the gateway authenticates a phone with
+# the setup code before forwarding to it. On a robot without a setup code it
+# exits 0 at start and stays stopped, so it costs nothing on the PIN path and
+# does not show up in `systemctl --failed`.
+#
 # robot-boot-check.service has no [Install] by design -- only its timer starts it
 # -- so the timer is what gets enabled.
 SYSTEMD_PACKAGES = "${PN} ${PN}-padd"
-SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service robot-boot-check.timer microduck-voice-bank.service"
+SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service duck-gateway.service robot-boot-check.timer microduck-voice-bank.service"
 SYSTEMD_SERVICE:${PN}-padd = "padd.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
@@ -370,6 +376,7 @@ do_install:append() {
 	install -m 0644 ${S}/tof/systemd/tofd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/nfc/systemd/nfcd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/netpadd/systemd/netpadd.service ${D}${systemd_system_unitdir}/
+	install -m 0644 ${S}/duck-gateway/systemd/duck-gateway.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/padd/systemd/padd.service ${D}${systemd_system_unitdir}/
 
 	# The boot recovery net, verbatim from the release: the timer runs
