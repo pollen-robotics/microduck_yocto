@@ -73,6 +73,17 @@ microduck_build_id() {
 
 IMAGE_FEATURES += "ssh-server-openssh"
 
+# Only the GStreamer plugins mediad loads (packagegroup-microduck-media says how
+# they were measured). Each plugin set's main package RRECOMMENDS its -meta, which
+# RDEPENDS on every plugin of the set, so without this the image gets all ~190 back.
+# The dev image inherits it on purpose: a plugin missing here must fail on a dev
+# board first, not first on a shipped robot.
+BAD_RECOMMENDATIONS += " \
+    gstreamer1.0-plugins-base-meta \
+    gstreamer1.0-plugins-good-meta \
+    gstreamer1.0-plugins-bad-meta \
+"
+
 # ssh over the head's USB-C link only, and on wifi on request until reboot:
 # microduck-ssh-access. Only on a machine with the USB gadget, since without
 # usb0 it would leave no ssh at all. The Zero 3W has none and keeps ssh on
