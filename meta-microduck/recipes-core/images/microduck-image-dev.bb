@@ -23,6 +23,18 @@ IMAGE_FEATURES += "allow-empty-password allow-root-login empty-root-password"
 # The dev bundle's build id is plain DATETIME, meta-rauc's RAUC_BUNDLE_BUILD default.
 MICRODUCK_BUILD_ID = "${DATETIME}"
 
+# The OS update page on every interface, as before it went loopback-only. It
+# takes apply and switch with no authorisation, which is why the shipping image
+# keeps it on 127.0.0.1; a board with password-less root ssh loses nothing by it.
+# An empty ListenStream= clears the shipping address before adding the port.
+ROOTFS_POSTPROCESS_COMMAND += "osupdate_page_on_lan"
+osupdate_page_on_lan() {
+	[ -e ${IMAGE_ROOTFS}${systemd_system_unitdir}/microduck-osupdate.socket ] || return 0
+	d=${IMAGE_ROOTFS}${sysconfdir}/systemd/system/microduck-osupdate.socket.d
+	install -d $d
+	printf '[Socket]\nListenStream=\nListenStream=8090\n' > $d/20-dev-lan.conf
+}
+
 IMAGE_INSTALL:append = " \
     microduck-daemon-devkey \
     rauc-conf-dev-ca \
