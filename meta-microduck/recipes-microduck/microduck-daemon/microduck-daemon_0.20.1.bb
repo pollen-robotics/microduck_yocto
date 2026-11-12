@@ -31,32 +31,18 @@ inherit cargo cargo-update-recipe-crates pkgconfig systemd useradd
 # releases/download/<tag>/<asset> URL returns 404 with or without a token, and
 # only the api.github.com/.../releases/assets/<id> form works authenticated.
 #
-# Which release: none in this file; it comes in as the two variables below
-# (README.md, "Which daemon the image seeds"), and without them the recipe skips
-# itself rather than building a version nobody chose.
+# Which release: PV is this file's name, SRCREV_daemon below. Bump both, and the
+# crate list, with scripts/bump-daemon.sh (README.md, "Which daemon the image
+# seeds"); a bump is a commit, so a commit of this repo names one daemon.
 #
-# SRCREV_daemon is still a RELEASE, never main: the manifest's source_revision,
+# SRCREV_daemon is a RELEASE, never main: the manifest's source_revision,
 # the commit CI built that release's binaries from -- not the tag, not main. That
 # matters more than it looks. The recipe once pinned 6507d2e, 21 commits *ahead*
 # of release 0.12.0, and both called themselves 0.12.0. updaterd compares
 # versions, so it would have seen 0.12.0 == 0.12.0, concluded there was nothing to
 # do, and never converged, while the two binaries differed. A version that does
 # not identify the code makes "is this robot up to date?" unanswerable. AUTOREV on
-# main would be the same mistake, and kas/microduck.yml rejects it by name.
-#
-# microduck-daemon-crates.inc is regenerated per build; the committed copy is
-# only what the last regeneration wrote.
-MICRODUCK_DAEMON_VERSION ??= ""
-MICRODUCK_DAEMON_SRCREV ??= ""
-PV = "${MICRODUCK_DAEMON_VERSION}"
-
-python __anonymous() {
-    if not d.getVar("MICRODUCK_DAEMON_VERSION") or not d.getVar("MICRODUCK_DAEMON_SRCREV"):
-        raise bb.parse.SkipRecipe("no daemon release chosen: MICRODUCK_DAEMON_VERSION and "
-                                  "MICRODUCK_DAEMON_SRCREV are unset. Build through "
-                                  "scripts/build-hfjob.sh or scripts/build-local.sh, or see "
-                                  "README.md 'Which daemon the image seeds'.")
-}
+# main would be the same mistake.
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
@@ -71,7 +57,7 @@ SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ss
 # atomics' try_update in mediad, and microduck#358 brought the floor back to 1.89
 # and recorded 1.94 as the ceiling in CONTRIBUTING.md. A release that needs a
 # newer Rust than that is a CI failure here, not a reason to pin an older one.
-SRCREV_daemon = "${MICRODUCK_DAEMON_SRCREV}"
+SRCREV_daemon = "7fba12ed048d0d3a1c306ba8a2787a1a407b9974"
 SRCREV_bmi088 = "bd113f317b14923f50f9a12a06678fe162b7fe06"
 SRCREV_FORMAT = "daemon_bmi088"
 
@@ -178,7 +164,7 @@ CARGO_BUILD_FLAGS += "--workspace --exclude xtask --exclude test-support --exclu
 # build" -- on a release image, of a release build. SRCREV_daemon is exactly the
 # commit CI built that release from (see above), so it is the same value CI stamps.
 # Not DUCK_BUILD_TIME: a wall-clock time would make the image unreproducible.
-export DUCK_REVISION = "${MICRODUCK_DAEMON_SRCREV}"
+export DUCK_REVISION = "${SRCREV_daemon}"
 
 # Both units hard-require this group; updater/systemd/sysusers.d/robot.conf exists
 # upstream to create it at first boot. Creating it at image build time instead is

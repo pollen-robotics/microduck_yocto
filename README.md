@@ -166,19 +166,19 @@ published release, and on demand.
 
 ### Which daemon the image seeds
 
-The newest `microduck` daemon release, unless the build names another. The
-recipe carries no version of its own: `scripts/daemon-release.sh` looks the
-release up, and the build scripts pass its version and commit in and regenerate
-the crate list for it.
+The release the recipe pins: its version is the file name
+(`microduck-daemon_<version>.bb`), its commit `SRCREV_daemon`. A bump is a
+commit:
 
 ```sh
-DAEMON_VERSION=0.16.1 scripts/build-local.sh
-HFJOB_DAEMON_VERSION=0.16.1 scripts/build-hfjob.sh
+scripts/bump-daemon.sh           # the newest release
+scripts/bump-daemon.sh 0.16.1    # that release
 ```
 
-The `build-image` workflow has the same choice as its `daemon_version` input.
-A plain `kas build kas/microduck.yml` sets neither, so the daemon recipe skips
-itself and the image does not build.
+It refuses a release whose policy set, NPU runtime or detector model the image
+does not ship, then renames the recipe, sets `SRCREV_daemon` and rewrites
+`microduck-daemon-crates.inc` from the release's `Cargo.lock` files. Commit the
+diff; builds use what is committed and look nothing up.
 
 ### Signing keys
 
