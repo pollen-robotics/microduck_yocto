@@ -48,10 +48,6 @@ on:
         type: choice
         options: [microduck-zero3, microduck-beta, microduck-face-board-v1]
         default: microduck-zero3
-      daemon_version:
-        description: "microduck_daemon release to seed, e.g. 0.16.1 (empty = the newest release)"
-        type: string
-        default: ""
       flavor:
         description: "HF Jobs hardware flavor"
         type: choice
@@ -134,10 +130,6 @@ jobs:
           # The matrix above picks the board: both on a push or a release.
           HFJOB_MACHINE: ${{ matrix.machine }}
           HFJOB_FLAVOR: ${{ inputs.flavor || 'cpu-performance' }}
-          # The newest daemon release unless the run names one, push included.
-          # build-hfjob.sh resolves it to a commit and prints `daemon: ...`,
-          # which goes into the summary below, so every run says what it seeded.
-          HFJOB_DAEMON_VERSION: ${{ inputs.daemon_version || 'latest' }}
           RAUC_DEV_KEY: ${{ secrets.RAUC_DEV_KEY }}
           RAUC_DEV_CERT: ${{ secrets.RAUC_DEV_CERT }}
         run: |
@@ -166,7 +158,7 @@ jobs:
           echo "job_id=$id" >> "$GITHUB_OUTPUT"
           echo "Launched https://huggingface.co/jobs/pollen-robotics/$id" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "$out" | grep -E '^daemon: ' >> "$GITHUB_STEP_SUMMARY" || true
-          # The resolved release (daemon-release.sh), for the release notes.
+          # The pinned release (build-hfjob.sh), for the release notes.
           printf '%s\n' "$out" | grep -m1 -E '^daemon: [^ ]+ at ' | sed 's/^/daemon=/' >> "$GITHUB_OUTPUT" || true
 
       # Judges the build on its logs, never on its exit status -- see the long
@@ -237,7 +229,7 @@ jobs:
           gh release upload "$TAG" * --clobber -R "$GITHUB_REPOSITORY"
           echo "Attached to release $TAG:" >> "$GITHUB_STEP_SUMMARY"
           ls -l >> "$GITHUB_STEP_SUMMARY"
-          # A release build seeds the newest daemon, so the notes say which one.
+          # The notes say which daemon the image seeds (the recipe's pin).
           # Both legs edit the same notes: re-read after writing, since a
           # concurrent edit from the other leg can overwrite this line.
           if [ -z "$DAEMON" ]; then

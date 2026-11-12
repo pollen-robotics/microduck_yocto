@@ -273,15 +273,15 @@ Each step assumes the ones before it passed.
 
 ## Which daemon the image carries
 
-The newest daemon release unless the build names one (README.md, "Which daemon
+The release `microduck-daemon_<version>.bb` pins (README.md, "Which daemon
 the image seeds"; a CI run's summary has a `daemon:` line), with
 `microduck-policies_v9.bb`, the policy set releases 0.19.0 onwards name as their
 floor. `tofd` drives the ToF over SPI from 0.16.0 (microduck#364), so this board
 needs 0.16.0 or later. Every release from 0.15.3 builds on wrynose's Rust 1.94.1;
 0.15.1 and 0.15.2 needed 1.99. A robot with network still converges to newer
 releases on its own, because `updaterd` installs CI's prebuilt binaries rather
-than this recipe's build. `microduck-daemon-crates.inc` is regenerated from the
-release's `Cargo.lock` files before every build.
+than this recipe's build. `scripts/bump-daemon.sh` regenerates
+`microduck-daemon-crates.inc` from the release's `Cargo.lock` files.
 
 ## The V1.0 face board (`microduck-face-board-v1`)
 

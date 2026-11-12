@@ -30,11 +30,8 @@ machine: microduck-zero3
 # tasks differ, every package is shared.
 target: microduck-image-dev
 
-# The daemon release (README.md, "Which daemon the image seeds"). null: forwarded
-# to bitbake when set, nothing otherwise.
+# null: forwarded to bitbake when set, nothing otherwise.
 env:
-  MICRODUCK_DAEMON_VERSION: null
-  MICRODUCK_DAEMON_SRCREV: null
   # The newest OS release (scripts/os-release.sh), the bundle's RAUC version.
   MICRODUCK_OS_VERSION: null
 

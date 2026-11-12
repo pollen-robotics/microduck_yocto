@@ -270,8 +270,8 @@ any of them breaks A/B without touching a single Yocto file:
   It has to stay a `flock` there: an `fcntl` lock does not conflict with one,
   so the two would quietly overlap again.
 
-Also: the daemon recipe has **no version of its own** (README.md, "Which daemon
-the image seeds"), and `SRCREV_daemon` is still a **release** commit, never
+Also: the daemon recipe is **pinned**, bumped by `scripts/bump-daemon.sh` in a
+commit (README.md, "Which daemon the image seeds"), and `SRCREV_daemon` is a **release** commit, never
 `main` — the manifest's `source_revision`. Same version string on different code
 is how `updaterd` decides there is nothing to do.
 

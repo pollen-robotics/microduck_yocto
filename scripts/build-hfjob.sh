@@ -5,7 +5,6 @@
 #   HFJOB_TARGET=linux-rockchip scripts/build-hfjob.sh       # one recipe
 #   HFJOB_FLAVOR=cpu-basic scripts/build-hfjob.sh checkout   # layers+conf, no build
 #   HFJOB_MACHINE=microduck-beta scripts/build-hfjob.sh      # the beta board
-#   HFJOB_DAEMON_VERSION=0.16.1 scripts/build-hfjob.sh       # not the newest daemon
 #   HFJOB_KAS_EXTRA=kas/cve.yml HFJOB_TARGET=microduck-image scripts/build-hfjob.sh
 #                                                            # + CVE scan (kas/cve.yml)
 #
@@ -59,10 +58,11 @@ for f in $(echo "$KAS_EXTRA" | tr ':' ' '); do
 	exit 1
 done
 
-# The daemon release (README.md, "Which daemon the image seeds"). Resolved here,
-# so a release the image cannot seed is refused before the job bills anything.
-# Its `daemon: ...` line on stderr is what CI copies into the run summary.
-daemon=$(scripts/daemon-release.sh "${HFJOB_DAEMON_VERSION:-latest}")
+# The daemon the recipe pins (README.md, "Which daemon the image seeds"). This
+# `daemon: ...` line on stderr is what CI copies into the run summary.
+daemon_bb=$(ls meta-microduck/recipes-microduck/microduck-daemon/microduck-daemon_*.bb)
+daemon_v=${daemon_bb##*_}
+echo "daemon: ${daemon_v%.bb} at $(sed -n 's/^SRCREV_daemon = "\(.*\)"$/\1/p' "$daemon_bb") (pinned)" >&2
 # The bundle's RAUC version: the newest OS release (scripts/os-release.sh).
 os_version=$(scripts/os-release.sh)
 
@@ -148,9 +148,7 @@ fi
 if [ -n "$KAS_EXTRA" ]; then
 	set -- "$@" -e "KAS_EXTRA=$KAS_EXTRA"
 fi
-for kv in $daemon MICRODUCK_OS_VERSION=$os_version; do
-	set -- "$@" -e "$kv"
-done
+set -- "$@" -e "MICRODUCK_OS_VERSION=$os_version"
 if [ -n "${HFJOB_SSH_KEY:-}" ]; then
 	# base64, because $(cat key) strips the trailing newline that OpenSSH requires
 	# on an ed25519 key -- which cost a build: kas picked the secret up, piped it to
@@ -539,28 +537,7 @@ fi
 rc=0
 kas_files=kas/microduck.yml:kas/hfjob.yml${KAS_EXTRA:+:$KAS_EXTRA}
 
-# Every daemon release brings its own Cargo.lock, so the crate list has to be
-# regenerated from it first, or the build is missing whatever crates the release
-# added. This writes microduck-daemon-crates.inc into this job's own copy of the
-# layer; the build below parses the new one. For a release whose lock matches the
-# committed list it rewrites the same file, and changes no task hash.
-#
-# Only for a target that builds the daemon: the step costs ~4.5 min even on a
-# warm cache (job 6ac641f3). microduck-*, not the images alone, because
-# do_build[rdeptask] builds RDEPENDS too, and microduck-board, -nfc, -face-leds,
-# -tof-spidev and -data all RDEPEND on the daemon. The few microduck-* recipes
-# that do not just pay the 4.5 min.
-if [ "$KAS_CMD" = build ]; then
-	case "${KAS_TARGET:-microduck-image}" in
-	*microduck-*)
-		echo "daemon: regenerating the crate list for $MICRODUCK_DAEMON_VERSION"
-		kas shell "$kas_files" -c "bitbake -c update_crates microduck-daemon" || rc=$?
-		;;
-	esac
-fi
-if [ "$rc" = 0 ]; then
-	kas "$KAS_CMD" "$kas_files" || rc=$?
-fi
+kas "$KAS_CMD" "$kas_files" || rc=$?
 
 # No copy here: save() already ran it, or is about to via the EXIT trap. Doing it
 # in both places is how the image gets lost -- the copy that matters is the one on
