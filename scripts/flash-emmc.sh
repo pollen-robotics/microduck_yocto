@@ -143,7 +143,9 @@ src_files() {
 get() {
 	[ -f "$2" ] && return
 	if [ "$KIND" = release ]; then
-		gh release download "$SRC" -R "$REPO" -p "$1" -O "$2.part"
+		# --clobber: a .part is only ever an interrupted download of this same
+		# file, and without it every retry stops on "already exists" (2026-11-12).
+		gh release download "$SRC" -R "$REPO" -p "$1" -O "$2.part" --clobber
 	else
 		hf buckets cp "$BUCKET/$SRC/$1" "$2.part" >/dev/null
 	fi
