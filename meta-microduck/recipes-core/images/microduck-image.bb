@@ -62,12 +62,23 @@ gen_rkparameter() {
 # The build id of the bundle that carries this image, as os-release's BUILD_ID.
 # RAUC records a slot's build only when it installs a bundle there, so a flashed
 # card had none and microduck-osupdate could only say "the flashed image".
+# It also replaces DISTRO_VERSION in os-release and the login banners, because
+# the release number is only chosen at promotion (microduck.conf).
 # microduck-image-dev.bb sets the dev bundle's id instead.
 require recipes-core/images/microduck-build-id.inc
 MICRODUCK_BUILD_ID = "${MICRODUCK_SHIPPING_BUILD}"
 MICRODUCK_BUILD_ID[vardepsexclude] = "DATETIME"
 ROOTFS_POSTPROCESS_COMMAND += "microduck_build_id"
 microduck_build_id() {
+	v=$(echo '${DISTRO_VERSION}' | sed 's/\./\\./g')
+	for f in ${IMAGE_ROOTFS}${nonarch_libdir}/os-release ${IMAGE_ROOTFS}${sysconfdir}/issue ${IMAGE_ROOTFS}${sysconfdir}/issue.net; do
+		[ -e "$f" ] || continue
+		sed -i "s/$v/${MICRODUCK_BUILD_ID}/g" "$f"
+	done
+	# os-release sanitises VERSION_ID (lowercase, '+' to '-'), so a DISTRO_VERSION
+	# the sed cannot match would leave a stale version: fail the build instead.
+	grep -qx 'VERSION_ID=${MICRODUCK_BUILD_ID}' ${IMAGE_ROOTFS}${nonarch_libdir}/os-release \
+		|| bbfatal "os-release still names DISTRO_VERSION ${DISTRO_VERSION}, not build ${MICRODUCK_BUILD_ID}"
 	echo 'BUILD_ID="${MICRODUCK_BUILD_ID}"' >> ${IMAGE_ROOTFS}${nonarch_libdir}/os-release
 }
 

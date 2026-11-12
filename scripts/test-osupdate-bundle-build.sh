@@ -30,7 +30,7 @@ expect() {  # wanted-build  description  exit  rauc-output
 
 # The shape promote-os.yml reads from rauc info on a runner.
 expect 20261110093000 "a verified bundle" 0 "RAUC_MF_COMPATIBLE='microduck-zero3'
-RAUC_MF_VERSION='1.2.0+20261110093000'
+RAUC_MF_VERSION='20261110093000'
 RAUC_MF_BUILD='20261110093000'
 RAUC_MF_DESCRIPTION='microduck'"
 expect 20261110093000 "unquoted" 0 "RAUC_MF_BUILD=20261110093000"

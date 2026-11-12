@@ -25,15 +25,4 @@ CMD=${1:-build}
 KAS_FILES=${KAS_FILES:-kas/microduck.yml}
 [ $# -gt 0 ] && shift
 
-# The bundle's RAUC version, the newest OS release, passed as -e in
-# --runtime-args because kas-container forwards no environment of its own beyond
-# its fixed list, so an exported variable never reaches kas inside the container.
-os_env="-e MICRODUCK_OS_VERSION=$(scripts/os-release.sh)"
-
-kas() {
-	kas-container \
-		--ssh-agent \
-		--runtime-args "$os_env" \
-		"$@"
-}
-kas "$CMD" "$KAS_FILES" "$@"
+kas-container --ssh-agent "$CMD" "$KAS_FILES" "$@"

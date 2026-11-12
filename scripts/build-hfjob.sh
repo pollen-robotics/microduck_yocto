@@ -63,8 +63,6 @@ done
 daemon_bb=$(ls meta-microduck/recipes-microduck/microduck-daemon/microduck-daemon_*.bb)
 daemon_v=${daemon_bb##*_}
 echo "daemon: ${daemon_v%.bb} at $(sed -n 's/^SRCREV_daemon = "\(.*\)"$/\1/p' "$daemon_bb") (pinned)" >&2
-# The bundle's RAUC version: the newest OS release (scripts/os-release.sh).
-os_version=$(scripts/os-release.sh)
 
 # The RAUC signing pair, needed only when the target is the bundle.
 #
@@ -148,7 +146,6 @@ fi
 if [ -n "$KAS_EXTRA" ]; then
 	set -- "$@" -e "KAS_EXTRA=$KAS_EXTRA"
 fi
-set -- "$@" -e "MICRODUCK_OS_VERSION=$os_version"
 if [ -n "${HFJOB_SSH_KEY:-}" ]; then
 	# base64, because $(cat key) strips the trailing newline that OpenSSH requires
 	# on an ed25519 key -- which cost a build: kas picked the secret up, piped it to

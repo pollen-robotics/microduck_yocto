@@ -287,8 +287,12 @@ Traps:
    resign` changes the signature only, so the build ids and payloads are the
    tested ones. The version is the highest `microduck-os-v<X.Y.Z>` release bumped
    (from 0.0.0), shared by every board, and it is what robots show ("updated to
-   1.0.0"). The bundle's own RAUC version (`PV` in `microduck-bundle.bb`, seen only
-   by `rauc info`) is the newest release when it was built (`scripts/os-release.sh`); dev and candidate builds show `<that release>+<build>`. The one GitHub release,
+   1.0.0"). The index names dev and candidate builds `<newest release>+<build>`
+   (`scripts/os-release.sh`). Inside the build, the bundle's RAUC version (`rauc
+   info`) and the image's `/etc/os-release` both show the build id, never a
+   release number: the number is chosen here, after the build, and re-signing
+   cannot change the payload (issue #122: a 1.3.0 robot said 1.2.0). The one
+   GitHub release,
    `microduck-os-v<X.Y.Z>` titled `v<X.Y.Z>`, is tagged at the commit and carries
    each board's re-signed bundle (`microduck-os-v<X.Y.Z>-<board>.raucb`) plus its
    shipping card (`.wic.zst`, `.bmap`) from the same job. The cards come from

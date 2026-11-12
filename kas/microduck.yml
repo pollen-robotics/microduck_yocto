@@ -30,11 +30,6 @@ machine: microduck-zero3
 # tasks differ, every package is shared.
 target: microduck-image-dev
 
-# null: forwarded to bitbake when set, nothing otherwise.
-env:
-  # The newest OS release (scripts/os-release.sh), the bundle's RAUC version.
-  MICRODUCK_OS_VERSION: null
-
 repos:
   # This repo; no url/commit, kas uses the checkout. Three layers, split the way
   # yocto-check-layer requires (one layer cannot be both DISTRO and BSP):
