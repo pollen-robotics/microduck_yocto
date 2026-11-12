@@ -172,6 +172,14 @@ DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins
 # pet-detect.
 CARGO_BUILD_FLAGS += "--workspace --exclude xtask --exclude test-support --exclude duckctl --exclude duck-ether"
 
+# Every daemon compiles in the commit it was built from (`option_env!("DUCK_REVISION")`
+# in duck-ipc-proto's build identity) and says it at startup. The daemon's CI sets it;
+# this recipe did not, so every image-built daemon logged "rev unknown, not a CI
+# build" -- on a release image, of a release build. SRCREV_daemon is exactly the
+# commit CI built that release from (see above), so it is the same value CI stamps.
+# Not DUCK_BUILD_TIME: a wall-clock time would make the image unreproducible.
+export DUCK_REVISION = "${MICRODUCK_DAEMON_SRCREV}"
+
 # Both units hard-require this group; updater/systemd/sysusers.d/robot.conf exists
 # upstream to create it at first boot. Creating it at image build time instead is
 # deterministic and does not depend on sysusers ordering, so that file is not
