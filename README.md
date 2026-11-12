@@ -47,11 +47,12 @@ Two images are built from the same recipes:
 ## Get an image
 
 Each [release](https://github.com/pollen-robotics/microduck_yocto/releases) is
-built from its tag for every board and carries the card image (`.wic.zst`, its
+built from its tag for the beta boards and carries the card image (`.wic.zst`, its
 `.bmap` and checksum), the update bundle (`.raucb`), the package manifest, and
-for the beta main boards `<machine>-loader.bin`, which `rkdeveloptool` needs.
-`gh release download <tag>` fetches them. Every push to `main` also builds the
-Zero 3W and publishes its bundle to the `dev` update channel.
+`<machine>-loader.bin`, which `rkdeveloptool` needs.
+`gh release download <tag>` fetches them. Every push to `main` also builds them
+and publishes their bundles to the `dev` update channel. The Zero 3W is built
+only on demand: run the `build-image` workflow with `machine: microduck-zero3`.
 
 **Zero 3W**, onto a 16 GB or larger SD card (needs `bmap-tools`; `bmaptool`
 reads the `.zst` directly and writes only the blocks in use):
