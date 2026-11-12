@@ -19,5 +19,16 @@ do_install:append() {
 	install -d ${D}${systemd_system_unitdir}/sshdgenkeys.service.d
 	install -m 0644 ${UNPACKDIR}/sshdgenkeys-data.conf \
 		${D}${systemd_system_unitdir}/sshdgenkeys.service.d/microduck-data.conf
+
+	# No ssh as root, even with a key: the way in is microduck@ then sudo.
+	# oe-core's default, prohibit-password, already refuses root here (no
+	# password, no authorized_keys); this keeps a key added later from opening it.
+	# Edited in place rather than in sshd_config.d: sshd keeps the first value it
+	# reads, and the Include comes first, so a drop-in would beat the dev image's
+	# allow-root-login, which rewrites this same line to yes at rootfs time.
+	for config in sshd_config sshd_config_readonly; do
+		sed -i 's/^#PermitRootLogin .*/PermitRootLogin no/' ${D}${sysconfdir}/ssh/$config
+		grep -qx 'PermitRootLogin no' ${D}${sysconfdir}/ssh/$config
+	done
 }
 # Packaged in openssh-sshd with sshdgenkeys.service: its FILES take the whole unit dir.
