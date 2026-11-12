@@ -67,14 +67,23 @@ check_machine() {
 
 # Newest successful build-image run that built MACHINE, from a push to main or
 # a dispatch. A run builds several machines, each in its own job, so the folder
-# is read only from the "build (MACHINE)" job's log lines.
+# is read only from the "build (MACHINE)" job's log.
+#
+# That one job's log, fetched by its id, rather than `gh run view --log` on the
+# whole run: gh 2.45 (Ubuntu 24.04's package) returns an empty whole-run log,
+# with exit status 0, so every run looked like it had no MACHINE build and this
+# failed with "no successful ... build" on a bucket full of them (2026-11-12).
+# One job's log is also a fraction of the download.
 latest_dev() {
-	local id log folder
+	local id job log folder
 	for id in $(gh run list -R "$REPO" -w build-image -s success -L 15 \
 		--json databaseId -q '.[].databaseId'); do
-		log=$(gh run view "$id" -R "$REPO" --log 2>/dev/null) || continue
-		folder=$(grep "^build ($MACHINE)" <<<"$log" |
-			grep -oE "$BUCKET/[A-Za-z0-9]+" | head -1) || true
+		job=$(gh run view "$id" -R "$REPO" --json jobs \
+			-q ".jobs[] | select(.name == \"build ($MACHINE)\" and .conclusion == \"success\") | .databaseId" \
+			2>/dev/null | head -1) || continue
+		[ -n "$job" ] || continue
+		log=$(gh api "repos/$REPO/actions/jobs/$job/logs" 2>/dev/null) || continue
+		folder=$(grep -oE "$BUCKET/[A-Za-z0-9]+" <<<"$log" | head -1) || true
 		[ -n "$folder" ] || continue
 		say "run https://github.com/$REPO/actions/runs/$id"
 		say "$(gh run view "$id" -R "$REPO" --json headBranch,headSha,displayTitle \
