@@ -14,6 +14,8 @@ SRC_URI = " \
     file://var-volatile-log-journal.mount \
     file://microduck-journal-dir.service \
     file://journal-flush.conf \
+    file://microduck-data-grow \
+    file://microduck-data-grow.service \
 "
 
 inherit systemd
@@ -21,7 +23,7 @@ inherit systemd
 # The unit name must be the mount point with / -> -.
 # microduck-journal-dir.service is not listed: the journal mount pulls it in.
 # Nor is var-lib-bluetooth.mount: bluetooth.service's StateDirectory= pulls it in.
-SYSTEMD_SERVICE:${PN} = "var-lib-robot.mount var-volatile-log-journal.mount"
+SYSTEMD_SERVICE:${PN} = "var-lib-robot.mount var-volatile-log-journal.mount microduck-data-grow.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
 do_install() {
@@ -30,6 +32,8 @@ do_install() {
 	install -m 0644 ${UNPACKDIR}/var-lib-bluetooth.mount ${D}${systemd_system_unitdir}/
 	install -m 0644 ${UNPACKDIR}/var-volatile-log-journal.mount ${D}${systemd_system_unitdir}/
 	install -m 0644 ${UNPACKDIR}/microduck-journal-dir.service ${D}${systemd_system_unitdir}/
+	install -m 0644 ${UNPACKDIR}/microduck-data-grow.service ${D}${systemd_system_unitdir}/
+	install -D -m 0755 ${UNPACKDIR}/microduck-data-grow ${D}${libexecdir}/microduck-data-grow
 	install -d ${D}${systemd_system_unitdir}/systemd-journal-flush.service.d
 	install -m 0644 ${UNPACKDIR}/journal-flush.conf ${D}${systemd_system_unitdir}/systemd-journal-flush.service.d/microduck.conf
 
@@ -45,13 +49,18 @@ do_install() {
 }
 
 # microduck-daemon ships /var/lib/robot itself; this adds two subdirectories.
-RDEPENDS:${PN} += "microduck-daemon networkmanager"
+# microduck-data-grow: grows the data partition (sfdisk, partx, blockdev) and
+# then its ext4, online (resize2fs).
+RDEPENDS:${PN} += "microduck-daemon networkmanager \
+    util-linux-sfdisk util-linux-partx util-linux-blockdev e2fsprogs-resize2fs"
 
 FILES:${PN} = " \
     ${systemd_system_unitdir}/var-lib-robot.mount \
     ${systemd_system_unitdir}/var-lib-bluetooth.mount \
     ${systemd_system_unitdir}/var-volatile-log-journal.mount \
     ${systemd_system_unitdir}/microduck-journal-dir.service \
+    ${systemd_system_unitdir}/microduck-data-grow.service \
+    ${libexecdir}/microduck-data-grow \
     ${systemd_system_unitdir}/systemd-journal-flush.service.d/microduck.conf \
     ${nonarch_libdir}/NetworkManager/conf.d/90-microduck-keyfile.conf \
     ${nonarch_libdir}/tmpfiles.d/microduck-data.conf \

@@ -17,6 +17,8 @@ inherit rockchip-image extrausers
 MICRODUCK_OPERATOR_HASH = "\$6\$microduckbeta\$lxVesOQbjM8IXwxq5s/GpwW0KnK1YuspITBn7crCGbeuodZd.PBnJJIS5E32lQK4/mugkqFe36SAr6iyo82Gu0"
 EXTRA_USERS_PARAMS = "useradd -m -s /bin/bash -G robot,sudo,audio,video,dialout,i2c,plugdev,input -p '${MICRODUCK_OPERATOR_HASH}' microduck;"
 # Group sudo may sudo: recipes-extended/sudo/sudo_%.bbappend.
+# A shared password is acceptable only because ssh is reachable over the head's
+# USB-C link alone (microduck-ssh-access below): using it means opening the robot.
 
 # The card image to download and flash is the compressed .wic.zst plus its .bmap:
 # `bmaptool copy` writes only the blocks in use, instead of dd copying all 13 GB.
@@ -71,7 +73,55 @@ microduck_build_id() {
 
 IMAGE_FEATURES += "ssh-server-openssh"
 
+# Only the GStreamer plugins mediad loads (packagegroup-microduck-media says how
+# they were measured). Each plugin set's main package RRECOMMENDS its -meta, which
+# RDEPENDS on every plugin of the set, so without this the image gets all ~190 back.
+# The dev image inherits it on purpose: a plugin missing here must fail on a dev
+# board first, not first on a shipped robot.
+BAD_RECOMMENDATIONS += " \
+    gstreamer1.0-plugins-base-meta \
+    gstreamer1.0-plugins-good-meta \
+    gstreamer1.0-plugins-bad-meta \
+"
+
+# ssh over the head's USB-C link only, and on wifi on request until reboot:
+# microduck-ssh-access. Only on a machine with the USB gadget, since without
+# usb0 it would leave no ssh at all. The Zero 3W has none and keeps ssh on
+# every interface: it is a stand-in board, never sold, whichever image it runs.
+# microduck-image-dev.bb reopens port 22 everywhere on every machine.
+IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
+
+# Setuid and setgid only where something needs it. The image carried 16 setuid
+# binaries (2026-11-10), each one a way from any local process to root: shadow's
+# su, passwd, chage, chfn, chsh, expiry, gpasswd and newgrp, util-linux's mount
+# and umount, newuidmap/newgidmap, and busybox.suid (ping, traceroute, vlock).
+# Nothing on the robot runs them as a user: there is one operator account and it
+# has sudo, and no daemon, hook or unit calls any of them (checked). The binaries
+# stay; only the bit goes, for root they work as before.
+#
+# An allowlist, not a list to strip, so a package added later cannot bring a new
+# setuid binary in without someone reading this:
+#   sudo                        the operator's way to root
+#   unix_chkpwd                 PAM's password check, which sudo's PAM stack uses
+#   dbus-daemon-launch-helper   D-Bus system service activation
+MICRODUCK_SETUID_ALLOWED = " \
+    ${bindir}/sudo \
+    ${sbindir}/unix_chkpwd \
+    ${libexecdir}/dbus-daemon-launch-helper \
+"
+ROOTFS_POSTPROCESS_COMMAND += "microduck_setuid_allowlist"
+microduck_setuid_allowlist() {
+	find ${IMAGE_ROOTFS} -xdev -type f -perm /6000 | while read -r f; do
+		case " ${MICRODUCK_SETUID_ALLOWED} " in
+		*" ${f#${IMAGE_ROOTFS}} "*) continue ;;
+		esac
+		bbnote "dropping setuid/setgid: ${f#${IMAGE_ROOTFS}}"
+		chmod u-s,g-s "$f"
+	done
+}
+
 IMAGE_INSTALL:append = " \
+    microduck-hardening \
     microduck-daemon \
     microduck-daemon-padd \
     microduck-board \

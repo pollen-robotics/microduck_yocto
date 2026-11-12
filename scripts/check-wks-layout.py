@@ -20,12 +20,11 @@ WKS = Path(__file__).resolve().parent.parent / "meta-microduck-bsp/files/wic/mic
 # name -> measured bytes of the artifact that must fit (2026-09-17).
 #
 # Keyed by the wks --part-name, so this list moves whenever a partition is
-# renamed. `boot` rather than `boot_a` because vendor U-Boot finds the kernel by
-# that exact GPT name -- see the comment on the part line in the wks.
+# renamed. The kernel is not here: it lives in each rootfs slot's /boot.
 ARTIFACTS = {
     "idblock": 313344,     # idblock.img
     "uboot": 4 << 20,      # uboot.img, exactly 4 MiB
-    "boot": 17004544,      # boot.img
+    "boot": 206848,        # boot.img: header + resource with the DTB U-Boot reads, no kernel (2026-11-10)
 }
 
 UNITS = {"s": 512, "S": 512, "K": 1024, "k": 1024, "M": 1 << 20, "G": 1 << 30}
@@ -65,7 +64,7 @@ def to_bytes(text, default_unit):
 
 
 def main():
-    parts, errors = [], []
+    parts, errors, guids = [], [], {}
     for line in WKS.read_text().splitlines():
         line = line.strip()
         if line.endswith("\\"):
@@ -73,6 +72,13 @@ def main():
             # no continuation handling, so a wrapped `part` line is a syntax error
             # that only shows up at do_image_wic.
             errors.append(f"line continuation, which wic does not support: {line}")
+            continue
+        # meta-rockchip's do_fixup_wks greps every line for "[^=]*\.img" and deletes
+        # the lines holding "file=<word>" for each word of a match that is not a
+        # deployed file. In a comment, "every boot ... boot.img" deleted the boot
+        # partition line (2026-11-10).
+        if line.startswith("#") and ".img" in line:
+            errors.append(f"a comment naming an image file; do_fixup_wks would act on it: {line}")
             continue
         if not line.startswith("part"):
             continue
@@ -101,6 +107,9 @@ def main():
             errors.append(f"{name}: neither --offset nor --align; placement is implicit")
             continue
         parts.append((name, start, size))
+        guid = re.search(r"--uuid (\S+)", line)
+        if guid:
+            guids[name] = guid.group(1).lower()
 
     for name, start, size in parts:
         fits = ARTIFACTS.get(name)
@@ -133,21 +142,28 @@ def main():
             errors.append(f"uboot_env is {byname['uboot_env'][1]:#x} B, "
                           f"CONFIG_ENV_SIZE is {env_size:#x}")
 
-    # U-Boot's ext4load reaches each slot's /boot by GPT partition number (the boot
-    # script sets rauc_partnum; this tree has no `part number`). Entries are numbered
-    # in wks order from 1, the --no-table idblock excluded.
-    table = [n for n, _, _ in parts if n != "idblock"]
+    # U-Boot's boot script finds each slot's partition by its GPT partition GUID
+    # (`part uuid`; this tree has no `part number`), so the GUIDs here and in the
+    # script must match, and be literal: a ${VAR} is expanded by bitbake, where this
+    # check cannot follow it.
     patch = BOOTCMD_PATCH.read_text()
-    nums = {"rootfs_a": re.search(r'setenv rauc_partnum (\d+); "', patch),
-            "rootfs_b": re.search(r'then setenv rauc_partnum (\d+); fi', patch)}
-    for name, m in nums.items():
+    for name, macro in (("rootfs_a", "MICRODUCK_ROOTFS_A_GUID"), ("rootfs_b", "MICRODUCK_ROOTFS_B_GUID")):
+        m = re.search(r'#define ' + macro + r' "([0-9a-fA-F-]{36})"', patch)
         if not m:
-            errors.append(f"{BOOTCMD_PATCH.name}: no rauc_partnum for {name}")
-        elif name not in table:
-            errors.append(f"{name}: missing, but the boot script loads its kernel")
-        elif table.index(name) + 1 != int(m.group(1)):
-            errors.append(f"{name} is GPT partition {table.index(name) + 1}, but the boot "
-                          f"script loads its kernel from partition {m.group(1)}")
+            errors.append(f"{BOOTCMD_PATCH.name}: no {macro}")
+        elif name not in guids:
+            errors.append(f"{name}: no literal --uuid in the wks, but the boot script finds it by GUID")
+        elif guids[name] != m.group(1).lower():
+            errors.append(f"{name} has GUID {guids[name]} in the wks, but the boot script "
+                          f"looks for {m.group(1)}")
+    names = [n for n, _, _ in parts]
+    # Vendor U-Boot reads its own DTB from the partition named exactly `boot` at init:
+    # without it a fresh flash has no serial-number.
+    if "boot" not in names:
+        errors.append("boot: missing -- vendor U-Boot reads its own DTB from it at init")
+    # microduck-data-grow grows data to the end of the disk only if it is the last one.
+    if names and names[-1] != "data":
+        errors.append(f"data must be the last partition (microduck-data-grow), not {names[-1]}")
 
     for name, want in FIXED.items():
         if name not in byname:

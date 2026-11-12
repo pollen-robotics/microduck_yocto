@@ -51,39 +51,66 @@ SANDBOX=${1:?usage: $0 /path/to/v2017.09/sandbox/u-boot}
 PATCH=$(dirname "$0")/../meta-microduck-bsp/recipes-bsp/u-boot/files/0001-evb_rk3568-select-the-RAUC-slot-before-Rockchip-s-boot.patch
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 
-# The macro exactly as the patch adds it, compiled so the C string escaping is
-# the compiler's, not a hand re-typing. RKIMG_BOOTCOMMAND is stubbed with a
-# marker so each case can tell whether the boot chain was reached.
+# The macros exactly as the patch adds them, compiled so the C string escaping is
+# the compiler's, not a hand re-typing. `gen select` prints the slot selection
+# alone, `gen` the whole bootcmd.
 {
 	echo '#include <stdio.h>'
-	echo '#define RKIMG_BOOTCOMMAND "echo REACHED_BOOT_CHAIN;"'
+	echo '#include <string.h>'
 	sed -n 's/^+//; /^#define MICRODUCK_RAUC_SELECT/,/rauc\.slot=\${rauc_slot}; "$/p' "$PATCH"
-	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_BOOT/,/falling back to the boot partition\\"; "$/p' "$PATCH"
-	echo 'int main(void){ fputs(MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT RKIMG_BOOTCOMMAND, stdout); return 0; }'
+	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_[AB]_GUID /p' "$PATCH"
+	sed -n 's/^+//; /^#define MICRODUCK_ROOTFS_BOOT/,/^[[:space:]]*"fi; "$/p' "$PATCH"
+	echo 'int main(int c, char **v){ fputs(c > 1 && !strcmp(v[1], "select") ? MICRODUCK_RAUC_SELECT : MICRODUCK_RAUC_SELECT MICRODUCK_ROOTFS_BOOT, stdout); return 0; }'
 } > "$work/gen.c"
 gcc -o "$work/gen" "$work/gen.c"
+stub_saveenv() { sed -e 's/saveenv;/echo SAVEENV_CALLED;/g'; }
+# The slot-selection cases: selection alone, then a marker, then the counters are
+# printed. A `reset` (both slots spent) ends the process before the marker.
+SELECT="$("$work/gen" select | stub_saveenv) echo AFTER_SELECT;"
 # booti does not exist on the sandbox (not arm64): stub it with a marker and reset,
 # which ends the process as a real booti would.
-BOOTCMD=$("$work/gen" | sed -e 's/saveenv;/echo SAVEENV_CALLED;/g' \
-	-e 's/booti \${kernel_addr_r} - \${fdt_addr_r};/echo BOOTI_FROM_PART ${rauc_partnum}; reset;/')
+BOOTCMD=$("$work/gen" | stub_saveenv |
+	sed -e 's/booti \${kernel_addr_r} - \${fdt_addr_r};/echo BOOTI_FROM_PART ${rauc_partnum} nokernel=${rauc_nokernel}.; reset;/')
 [ -n "$BOOTCMD" ] || { echo "could not extract the boot script from $PATCH"; exit 1; }
 grep -qF BOOTI_FROM_PART <<< "$BOOTCMD" || { echo "booti stub did not apply; $PATCH changed shape"; exit 1; }
+grep -qF 'giving up on slot' <<< "$BOOTCMD" || { echo "no-kernel path not extracted; $PATCH changed shape"; exit 1; }
+# Every reset turned into a marker, so the counters a no-kernel boot leaves can be
+# printed afterwards.
+NORESET=$(sed -e 's/reset;/echo RESET_CALLED;/g' <<< "$BOOTCMD")
 
-# A card for ext4load, bound as host device 0: GPT with the wks's entries, ext4 in
-# partitions 6 (rootfs_a) and 7 (rootfs_b). /boot/Image and microduck.dtb are
-# symlinks, as on the real rootfs, so U-Boot's ext4 symlink handling is exercised.
-# mkcard CARD A B: A/B = 1 puts a kernel in that slot.
+# A card for ext4load, bound as host device 0: GPT with the wks's entries and the
+# slots' fixed partition GUIDs, which is how the script finds them. Three layouts:
+# "new" (boot, no boot_b: rootfs_a 5, rootfs_b 6, data 7), "noboot" (cards flashed by
+# a #98 build, no boot either: 4, 5, 6) and "old" (cards flashed with boot and
+# boot_b: 6, 7, 8); "noguid" is the new layout without the GUIDs.
+# /boot/Image and microduck.dtb are symlinks, as on the real rootfs, so U-Boot's ext4
+# symlink handling is exercised.
+# mkcard CARD LAYOUT A B: A/B = 1 puts a kernel in that slot.
+GUID_A=$(sed -n 's/^+#define MICRODUCK_ROOTFS_A_GUID "\(.*\)"$/\1/p' "$PATCH")
+GUID_B=$(sed -n 's/^+#define MICRODUCK_ROOTFS_B_GUID "\(.*\)"$/\1/p' "$PATCH")
 mkcard() {
-	local card=$1 a_kernel=$2 b_kernel=$3 fs want
+	local card=$1 layout=$2 a_kernel=$3 b_kernel=$4 fs want pa pb
 	truncate -s 64M "$card"
 	# -o in a call of its own: combined with -n on a fresh file, sgdisk writes no
 	# entries and still exits 0.
 	sgdisk -o "$card" >/dev/null
-	sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M -n 4:0:+1M -n 5:0:+1M \
-		-n 6:0:+16M -n 7:0:+16M "$card" >/dev/null
-	for p in 6 7; do
+	if [ "$layout" = old ]; then
+		pa=6; pb=7
+		sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M -n 4:0:+1M -n 5:0:+1M \
+			-n 6:0:+16M -n 7:0:+16M -n 8:0:+1M "$card" >/dev/null
+	elif [ "$layout" = noboot ]; then
+		pa=4; pb=5
+		sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M \
+			-n 4:0:+16M -n 5:0:+16M -n 6:0:+1M "$card" >/dev/null
+	else
+		pa=5; pb=6
+		sgdisk -n 1:2048:+256K -n 2:0:+32K -n 3:0:+1M -n 4:0:+1M \
+			-n 5:0:+16M -n 6:0:+16M -n 7:0:+1M "$card" >/dev/null
+	fi
+	[ "$layout" = noguid ] || sgdisk -u "$pa:$GUID_A" -u "$pb:$GUID_B" "$card" >/dev/null
+	for p in $pa $pb; do
 		fs=$work/fs$p; rm -rf "$fs"; mkdir -p "$fs/boot"
-		want=$a_kernel; [ "$p" = 7 ] && want=$b_kernel
+		want=$a_kernel; [ "$p" = "$pb" ] && want=$b_kernel
 		if [ "$want" = 1 ]; then
 			echo "kernel-$p" > "$fs/boot/Image-6.1.84"; ln -s Image-6.1.84 "$fs/boot/Image"
 			echo "dtb-$p" > "$fs/boot/board.dtb"; ln -s board.dtb "$fs/boot/microduck.dtb"
@@ -93,19 +120,18 @@ mkcard() {
 		dd if="$work/p$p.img" of="$card" bs=512 seek="$start" conv=notrunc status=none
 	done
 }
-mkcard "$work/none" 0 0; mkcard "$work/both" 1 1; mkcard "$work/a-only" 1 0
+[ -n "$GUID_A" ] && [ -n "$GUID_B" ] || { echo "no MICRODUCK_ROOTFS_[AB]_GUID in $PATCH"; exit 1; }
+mkcard "$work/none" new 0 0; mkcard "$work/both" new 1 1; mkcard "$work/a-only" new 1 0
+mkcard "$work/old-both" old 1 1; mkcard "$work/noboot-both" noboot 1 1; mkcard "$work/noguid" noguid 1 1
 # devtype/devnum come from Rockchip's board init on the board; addresses are the
-# board's kernel_addr_r/fdt_addr_r, inside the sandbox's RAM. The slot-selection
-# cases run on a card with no kernel anywhere, so the script falls through to the
-# boot chain and the counters are printed afterwards.
+# board's kernel_addr_r/fdt_addr_r, inside the sandbox's RAM.
 dev() { echo "host bind 0 $work/$1; setenv devtype host; setenv devnum 0; setenv kernel_addr_r 0x1000000; setenv fdt_addr_r 0x3000000;"; }
-HOSTDEV=$(dev none)
 
 pass=0; fail=0
 check() {  # name, env setup, then expected substrings
 	local name=$1 setup=$2; shift 2
 	local out ok=1
-	out=$("$SANDBOX" -c "$HOSTDEV $setup $BOOTCMD printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT bootargs" 2>&1) || true
+	out=$("$SANDBOX" -c "$setup $SELECT printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT bootargs" 2>&1) || true
 	for want in "$@"; do grep -qF -- "$want" <<< "$out" || { ok=0; echo "     missing: $want"; }; done
 	grep -qiE 'syntax error|Unknown command' <<< "$out" && { ok=0; echo "     parser complained"; }
 	if [ $ok = 1 ]; then pass=$((pass + 1)); echo "ok   $name"; else fail=$((fail + 1)); echo "FAIL $name"; fi
@@ -113,7 +139,7 @@ check() {  # name, env setup, then expected substrings
 
 check "virgin env: seeds, picks A, decrements" "" \
 	"booting slot A (rootfs_a)" "BOOT_ORDER=A" "BOOT_A_LEFT=0x2" "BOOT_B_LEFT=3" \
-	"bootargs=root=PARTLABEL=rootfs_a rauc.slot=A" "SAVEENV_CALLED" "REACHED_BOOT_CHAIN"
+	"bootargs=root=PARTLABEL=rootfs_a rauc.slot=A" "SAVEENV_CALLED" "AFTER_SELECT"
 check "after rauc install: B first" \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
 	"booting slot B (rootfs_b)" "BOOT_A_LEFT=3" "BOOT_B_LEFT=0x2" "bootargs=root=PARTLABEL=rootfs_b rauc.slot=B"
@@ -146,24 +172,33 @@ check "unknown bootname skipped" \
 	"booting slot B"
 
 # Both exhausted, in U-Boot's own format for one of them: counters reset, then
-# `reset` -- which ends the sandbox process, so the boot chain must never be reached.
-out=$("$SANDBOX" -c "setenv BOOT_ORDER 'A B'; setenv BOOT_A_LEFT 0; setenv BOOT_B_LEFT 0x0; $BOOTCMD" 2>&1) || true
-if grep -qF "no slot has attempts left" <<< "$out" && ! grep -qF REACHED_BOOT_CHAIN <<< "$out"; then
+# `reset` -- which ends the sandbox process, so nothing after the selection runs.
+out=$("$SANDBOX" -c "setenv BOOT_ORDER 'A B'; setenv BOOT_A_LEFT 0; setenv BOOT_B_LEFT 0x0; $SELECT" 2>&1) || true
+if grep -qF "no slot has attempts left" <<< "$out" && ! grep -qF AFTER_SELECT <<< "$out"; then
 	pass=$((pass + 1)); echo "ok   both exhausted: resets and reboots, never boots"
 else fail=$((fail + 1)); echo "FAIL both exhausted: resets and reboots, never boots"; fi
 
 # A pinned and spent: B still has attempts but is not in BOOT_ORDER, so it must
 # not be booted -- counters reset and the board resets onto A again.
-out=$("$SANDBOX" -c "setenv BOOT_A_LEFT 0x0; setenv BOOT_B_LEFT 3; $BOOTCMD" 2>&1) || true
-if grep -qF "no slot has attempts left" <<< "$out" && ! grep -qF "booting slot B" <<< "$out" && ! grep -qF REACHED_BOOT_CHAIN <<< "$out"; then
+out=$("$SANDBOX" -c "setenv BOOT_A_LEFT 0x0; setenv BOOT_B_LEFT 3; $SELECT" 2>&1) || true
+if grep -qF "no slot has attempts left" <<< "$out" && ! grep -qF "booting slot B" <<< "$out" && ! grep -qF AFTER_SELECT <<< "$out"; then
 	pass=$((pass + 1)); echo "ok   A pinned and spent: resets, never boots B"
 else fail=$((fail + 1)); echo "FAIL A pinned and spent: resets, never boots B"; fi
 
-# The kernel in the slot: booted from the slot's own partition, and never through
-# Rockchip's chain. Then a slot without one falls back to that chain.
+# B given up (no kernel) while A was already spent: both spent, the mark still set.
+# The counter reset must clear it, or the next boot's B -- still without a kernel --
+# would stop instead of being given up on, and A, which has one, never be tried.
+out=$("$SANDBOX" -c "setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 0; setenv BOOT_B_LEFT 0; setenv rauc_nokernel 1; $(sed -e 's/reset;/echo RESET_CALLED;/g' <<< "$SELECT") printenv rauc_nokernel" 2>&1) || true
+if grep -qF "no slot has attempts left" <<< "$out" && grep -qF RESET_CALLED <<< "$out" && ! grep -qF "rauc_nokernel=1" <<< "$out"; then
+	pass=$((pass + 1)); echo "ok   both spent with the mark set: the counter reset clears it"
+else fail=$((fail + 1)); echo "FAIL both spent with the mark set: the counter reset clears it"; fi
+
+# The kernel in the slot: booted from the slot's own partition. A slot without one
+# is given up on: its counter zeroed and saved, then a reset. CMD picks the
+# variant: BOOTCMD as on the board, NORESET to print the counters left behind.
 boot_case() {  # name, card, env setup, then expected / forbidden (!-prefixed) substrings
 	local name=$1 card=$2 setup=$3 out ok=1; shift 3
-	out=$("$SANDBOX" -c "$(dev "$card") $setup $BOOTCMD" 2>&1) || true
+	out=$("$SANDBOX" -c "$(dev "$card") $setup ${CMD:-$BOOTCMD} printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT rauc_nokernel" 2>&1) || true
 	for want in "$@"; do
 		case "$want" in
 		!*) grep -qF -- "${want#!}" <<< "$out" && { ok=0; echo "     unexpected: ${want#!}"; } ;;
@@ -173,14 +208,51 @@ boot_case() {  # name, card, env setup, then expected / forbidden (!-prefixed) s
 	grep -qiE 'syntax error|Unknown command' <<< "$out" && { ok=0; echo "     parser complained"; }
 	if [ $ok = 1 ]; then pass=$((pass + 1)); echo "ok   $name"; else fail=$((fail + 1)); echo "FAIL $name"; echo "$out" | tail -5 | sed 's/^/     | /'; fi
 }
-boot_case "kernel in A: loaded from partition 6, Rockchip chain not reached" both "" \
-	"RAUC: kernel from rootfs_a" "BOOTI_FROM_PART 6" "!REACHED_BOOT_CHAIN"
-boot_case "after rauc install, B first: loaded from partition 7" both \
+boot_case "new layout, kernel in A: found by GUID at partition 5" both "" \
+	"rootfs_a is partition 5" "RAUC: kernel from rootfs_a" "BOOTI_FROM_PART 5" "!giving up" "!BOOT_ORDER="
+boot_case "new layout, B first: found by GUID at partition 6" both \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
-	"RAUC: kernel from rootfs_b" "BOOTI_FROM_PART 7" "!REACHED_BOOT_CHAIN"
-boot_case "B has no kernel: falls back to the boot partition" a-only \
+	"rootfs_b is partition 6" "RAUC: kernel from rootfs_b" "BOOTI_FROM_PART 6" "!giving up"
+boot_case "a #98 card (no boot), A: found at partition 4" noboot-both "" \
+	"rootfs_a is partition 4" "BOOTI_FROM_PART 4" "!giving up"
+boot_case "old layout (boot and boot_b), A: found at partition 6" old-both "" \
+	"rootfs_a is partition 6" "BOOTI_FROM_PART 6" "!giving up"
+boot_case "old layout, B first: found at partition 7" old-both \
 	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
-	"no kernel in rootfs_b, falling back" "REACHED_BOOT_CHAIN" "!BOOTI_FROM_PART"
+	"rootfs_b is partition 7" "BOOTI_FROM_PART 7" "!giving up"
+# A card whose slots lack the GUIDs: nothing found, so nothing is loaded from a
+# guessed partition -- handled as a slot without a kernel.
+CMD=$NORESET boot_case "no slot GUID on the card: no partition guessed" noguid \
+	"setenv BOOT_ORDER 'A B';" "!BOOTI_FROM_PART" "giving up on slot A"
+# On the board the reset ends it: nothing may run after giving up on a slot.
+boot_case "B has no kernel: gives up and resets, boots nothing" a-only \
+	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
+	"no bootable kernel in rootfs_b, giving up on slot B" "!BOOTI_FROM_PART" "!BOOT_ORDER="
+# With reset stubbed: B's counter is zeroed and saved, so the next boot takes A;
+# A's is untouched and BOOT_ORDER is left to RAUC.
+CMD=$NORESET boot_case "B has no kernel: zeroes and saves B, next boot is A" a-only \
+	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 3;" \
+	"SAVEENV_CALLED" "RESET_CALLED" "BOOT_ORDER=B A" "BOOT_A_LEFT=3" "BOOT_B_LEFT=0" "rauc_nokernel=1" "!BOOTI_FROM_PART"
+CMD=$NORESET boot_case "no kernel anywhere: gives up on A first" none "setenv BOOT_ORDER 'A B';" \
+	"giving up on slot A" "BOOT_A_LEFT=0" "BOOT_B_LEFT=3" "rauc_nokernel=1" "!BOOTI_FROM_PART"
+# ... then, after that reset, B has none either: it stops rather than give up on B
+# too, reset into "no slot has attempts left", restore both counters and go round
+# again for ever. The mark is cleared, so a power cycle tries both once more.
+CMD=$NORESET boot_case "no kernel anywhere, A already given up: stops on B, no loop" none \
+	"setenv BOOT_ORDER 'A B'; setenv BOOT_A_LEFT 0; setenv BOOT_B_LEFT 3; setenv rauc_nokernel 1;" \
+	"no bootable kernel in rootfs_b either; stopping" "BOOT_B_LEFT=0x2" "!RESET_CALLED" "!giving up" \
+	"!rauc_nokernel=1" "!BOOTI_FROM_PART"
+# A kernel that loads clears the mark before booting, so a later slot without a
+# kernel is given up on as usual rather than taken for the second of a pair.
+boot_case "B given up, A has a kernel: the mark is cleared before booting A" a-only \
+	"setenv BOOT_ORDER 'B A'; setenv BOOT_A_LEFT 3; setenv BOOT_B_LEFT 0; setenv rauc_nokernel 1;" \
+	"BOOTI_FROM_PART 5 nokernel=." "!nokernel=1"
+# A one-slot order (every board once a trial ends): nothing to reset onto, so it
+# stops -- no zeroing, no second saveenv, no reset -- instead of looping.
+CMD=$NORESET boot_case "A alone in BOOT_ORDER without a kernel: stops, no loop" none "" \
+	"no other slot to boot; stopping" "BOOT_ORDER=A" "BOOT_A_LEFT=0x2" "!RESET_CALLED" "!giving up" "!BOOTI_FROM_PART"
+boot_case "  ... and, as on the board, nothing runs after it" none "" \
+	"no other slot to boot; stopping" "!BOOTI_FROM_PART"
 
 echo "---- $pass passed, $fail failed  (bootcmd ${#BOOTCMD} chars; CONFIG_SYS_CBSIZE does not bound it)"
 [ "$fail" = 0 ]

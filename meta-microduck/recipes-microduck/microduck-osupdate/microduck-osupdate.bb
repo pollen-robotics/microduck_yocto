@@ -1,7 +1,8 @@
-SUMMARY = "OS updates from a published channel, with a LAN page (prototype)"
+SUMMARY = "OS updates from a published channel, with a local page (prototype)"
 DESCRIPTION = "Checks os/<machine>/<channel>.env in the public microduck-os bucket, \
 downloads and verifies the bundle, installs it with rauc and reboots; reports the \
-outcome on the next boot. An HTTP API and page on port 8090. See the script."
+outcome on the next boot. An HTTP API and page on 127.0.0.1:8090 (every interface \
+on the dev image). See the script."
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 

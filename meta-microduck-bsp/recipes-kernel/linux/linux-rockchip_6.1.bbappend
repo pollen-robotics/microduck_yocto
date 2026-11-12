@@ -38,15 +38,53 @@ SRC_URI = " \
     file://cgroups.cfg \
     file://mali-csf.cfg \
     file://no-mali400.cfg \
+    file://no-mali-gpu.cfg \
     file://qemu-virt.cfg \
     file://rauc.cfg \
     file://watchdog.cfg \
+"
+
+# Kernel CVE backports, ahead of Armbian moving rk-6.1-rkr7.2 past 6.1.172: the
+# known-exploited (CISA KEV 2026.11.09) and likeliest-exploited (FIRST EPSS)
+# kernel CVEs our scan found open, each fixed by one 6.1 stable commit. Each
+# patch is that commit as is, plus CVE: and Upstream-Status: Backport tags; the
+# CVE: tag is what makes the scan count it patched.
+#   0010  CVE-2026-46300  KEV   net/core/skbuff.c             6.1.174
+#   0011  CVE-2026-53266  KEV   net/bridge/netfilter/ebt_snat 6.1.176
+#   0012  CVE-2026-53362  KEV   net/ipv6/ip6_output.c         6.1.177
+#   0013  CVE-2026-43499  EPSS  kernel/locking/rtmutex.c      6.1.175
+#   0014  CVE-2025-21759  EPSS  net/ipv6/mcast.c              6.1.189
+# When SRCREV reaches a stable release that carries one, drop its patch: it will
+# no longer apply.
+SRC_URI += " \
+    file://0010-net-skbuff-preserve-shared-frag-marker-during-coalescing.patch \
+    file://0011-netfilter-bridge-make-ebt-snat-ARP-rewrite-writable.patch \
+    file://0012-ipv6-account-for-fraggap-on-the-paged-allocation-path.patch \
+    file://0013-rtmutex-Use-waiter-task-instead-of-current-in.patch \
+    file://0014-ipv6-mcast-extend-RCU-protection-in-igmp6-send.patch \
 "
 
 # Reproducible boot.img: microduck-bundle refuses a bundle whose boot.img differs from the card's.
 #   no-mali400.cfg    the Mali-400 driver baked `date` into the Image
 # (resource_tool used to write stack garbage into resource.img and needed a patch;
 # this tree zero-initialises those structs itself.)
+
+# boot.img without a kernel: the Android header and resource.img, which carries the
+# board DTB (rk-kernel.dtb). That DTB is all the `boot` partition is for: vendor
+# U-Boot sets itself up from it at init, and without it falls back to a generic
+# tree that cannot read the OTP -- no serial-number, so the USB gadget's MACs are
+# the same on every robot (beta, 2026-11-10). The kernel comes from the slot, so one here would
+# only be a fallback that does not match the slot's modules. mkimg built both
+# boot.img and zboot.img, and meta-rockchip deploys zboot.img under the name
+# boot.img (ROCKCHIP_KERNEL_COMPRESSED), so both are replaced. Same mkbootimg,
+# empty kernel: byte-identical to the DTB-only image a beta booted.
+microduck_boot_img_dtb_only() {
+	[ -s "${B}/resource.img" ] || bbfatal "no resource.img in ${B}: mkimg changed"
+	for img in boot.img zboot.img; do
+		"${S}/scripts/mkbootimg" --kernel /dev/null --second "${B}/resource.img" -o "${B}/$img"
+	done
+}
+do_compile[postfuncs] += "microduck_boot_img_dtb_only"
 
 # The defconfig: radxa's, written into the tree as microduck_defconfig before
 # do_kernel_metadata reads ${S}/arch/${ARCH}/configs/${KBUILD_DEFCONFIG}.

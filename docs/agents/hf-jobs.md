@@ -79,8 +79,8 @@ incomplete while looking like a file. Three checks, all cheap:
        curl -sfL -r 0-17407 -H "Authorization: Bearer $T" "$B/<image>.wic" \
          | tr -d '\0' | grep -oE "[a-z_]{4,10}" | sort -u
 
-   Expect `boot boot_b data rootfs_a rootfs_b uboot uboot_env`. `boot` present
-   is the one that matters — see `rauc.md`.
+   Expect `boot data rootfs_a rootfs_b uboot uboot_env` (no `boot_b` since the
+   2026-11-09 layout). `boot` present is the one that matters — see `rauc.md`.
 
 The bundle's real name is in the log (`grep -oE 'microduck-bundle-...-[0-9]+\.raucb'`);
 fetching the unversioned symlink name 404s.

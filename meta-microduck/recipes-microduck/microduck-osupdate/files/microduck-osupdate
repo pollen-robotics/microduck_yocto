@@ -14,11 +14,13 @@
 # key and every value checked against a pattern -- never sourced. The bundle is
 # what RAUC verifies (X.509 signature, compatible, the install-check hook); the
 # manifest only says which bundle.
-# The manifest is unsigned, so whoever can write the bucket can point a robot at
-# an older, validly signed bundle. A production board refuses any build older
+# The manifest is unsigned, but its BUILD must be the bundle's signed build or
+# apply refuses it, so whoever can write the bucket cannot pass an older, validly
+# signed bundle off as a newer one. A production board refuses any build older
 # than the one it runs (see apply).
-# shortcut: a dev board takes the downgrade; it is a bench board. Sign the
-# manifest if the bucket's write access ever widens.
+# shortcut: a dev board takes the downgrade; it is a bench board. And a bucket
+# writer can still hold a board on an old build by never moving the channel. Sign
+# the manifest, with an expiry, if the bucket's write access ever widens.
 set -eu
 
 BASE_URL=https://huggingface.co/buckets/pollen-robotics/microduck-os/resolve
@@ -30,7 +32,7 @@ if production; then CHANNEL=stable; else CHANNEL=dev; fi
 MIN_BATTERY_PCT=30
 # Root-owned local configuration, so sourcing it is fine (unlike the manifest).
 [ ! -r /etc/microduck-osupdate.conf ] || . /etc/microduck-osupdate.conf
-# Overridable for scripts/test-osupdate-boot-report.sh only.
+# Overridable for scripts/test-osupdate-*.sh only.
 STATE=${MICRODUCK_OSUPDATE_STATE:-/var/lib/robot/osupdate}
 mkdir -p "$STATE"
 
@@ -69,8 +71,9 @@ other_installed() { other_slot_json | grep -o '"installed":{"timestamp":"[^"]*"'
 # Good: RAUC still calls it good, or microduck-slot-trial recorded its OS as good on
 # this board. RAUC alone is not enough: once a slot's trial ends, BOOT_ORDER names only
 # that slot, and RAUC reads every slot BOOT_ORDER does not name as bad.
-GOOD_RECORD=/var/lib/robot/slot-health/good
-# A BOOT_<slot>_LEFT of zero, or none: U-Boot writes "0x0", RAUC plain hex ("0").
+# Overridable for scripts/test-osupdate-apply.sh only.
+GOOD_RECORD=${MICRODUCK_SLOT_GOOD:-/var/lib/robot/slot-health/good}
+# A BOOT_<slot>_LEFT of zero, or none: U-Boot writes hex ("0x0"), RAUC decimal.
 left_zero() { [ -z "$1" ] || printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
 # Is the booted slot still on trial? First in BOOT_ORDER, with the other slot listed
 # after it and holding attempts: microduck-slot-health reboots such a slot when it
@@ -84,12 +87,6 @@ on_trial() {
 	[ -n "$o" ] || return 1
 	case " $order " in *" $o "*) ;; *) return 1 ;; esac
 	! left_zero "$(fw_printenv -n "BOOT_${o}_LEFT" 2>/dev/null)"
-}
-# RAUC's mark-good wrote the booted slot's counter back this boot: it writes plain hex
-# ("3"), where U-Boot's own decrement before the boot left "0x2" (the U-Boot patch's note).
-marked_good() {
-	n=$(fw_printenv -n "BOOT_$(booted_name)_LEFT" 2>/dev/null) || return 1
-	case $n in "" | 0x*) return 1 ;; esac
 }
 other_good() {
 	other_slot_json | grep -q '"boot_status":"good"' ||
@@ -114,6 +111,13 @@ battery_ok() {
 
 # field FILE KEY: the first KEY= line's value.
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
+
+# bundle_build FILE: the build in the bundle's signed manifest (RAUC_BUNDLE_BUILD),
+# empty if RAUC will not verify the bundle. RAUC's error goes to $STATE/rauc.log.
+bundle_build() {
+	rauc info --output-format=shell "$1" 2> "$STATE/rauc.log" |
+		sed -n "s/^RAUC_MF_BUILD='\{0,1\}\([0-9]\{14\}\)'\{0,1\}\$/\1/p"
+}
 
 board_machine() {
 	m=$(machine)
@@ -195,6 +199,7 @@ apply() {
 	build=$(field "$a" BUILD); url=$(field "$a" URL); sha256=$(field "$a" SHA256)
 	size=$(field "$a" SIZE); version=$(field "$a" VERSION)
 	installed=$(installed_build)
+	hint=; production && hint=" (this board takes production-signed stable builds only)"
 	[ "$build" != "$installed" ] || fail "build $build is already running"
 	# Build ids are UTC timestamps, so newer is larger. A flashed slot has none.
 	# Going back on a production board is `switch`, to the other slot as it is.
@@ -218,6 +223,14 @@ apply() {
 		fail "download failed (it resumes on the next try)"
 	[ "$(wc -c < "$part")" = "$size" ] || { rm -f "$part"; fail "downloaded size is not $size"; }
 	[ "$(sha256sum "$part" | cut -d' ' -f1)" = "$sha256" ] || { rm -f "$part"; fail "sha256 mismatch"; }
+	# Every check above took the unsigned manifest's BUILD on trust; hold it to the
+	# bundle's signed one before the other slot is touched.
+	signed=$(bundle_build "$part")
+	if [ "$signed" != "$build" ]; then
+		rm -f "$part"
+		[ -n "$signed" ] || fail "rauc refused it: $(tail -n 1 "$STATE/rauc.log")$hint"
+		fail "the bundle is build $signed, but its manifest says $build"
+	fi
 
 	phase installing; say "installing $version"
 	from=$(booted_name)
@@ -243,7 +256,6 @@ apply() {
 			! left_zero "$(fw_printenv -n "BOOT_${to}_LEFT" 2>/dev/null || true)"; then
 			printf '%s\n' "$record" >> "$GOOD_RECORD"
 		fi
-		hint=; production && hint=" (this board takes production-signed stable builds only)"
 		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)$hint"
 	fi
 	rm -f "$part"
@@ -284,24 +296,6 @@ boot_report() {
 	p=$STATE/pending.env
 	t=$STATE/target.env
 	ph=$(cat "$STATE/phase" 2>/dev/null || true)
-	# Only an update to report, or an install a power cut may have stopped, needs RAUC;
-	# an ordinary boot does not ask it.
-	if [ -f "$p" ] || { [ "$ph" = installing ] && [ -f "$t" ]; }; then
-		# One answer from RAUC for the whole report, so every question below reads the same.
-		RAUC_JSON=$(rauc_json) || RAUC_JSON=
-		if [ -z "$RAUC_JSON" ]; then
-			# No answer: on a boot that failed, this runs during the reboot slot-health
-			# asked for, while rauc.service stops. Everything stays for the next boot to
-			# report. Outside a shutdown no reboot is coming, so an update waiting on its
-			# outcome is not left showing "rebooting" until one does; an install a power cut
-			# stopped keeps "installing", which the next boot needs to rebuild pending.env.
-			if [ -f "$p" ] && [ "$(systemctl is-system-running 2>/dev/null || true)" != stopping ]; then
-				say "rauc did not answer; what $(field "$p" VERSION) came to waits for the next boot"
-				phase idle
-			fi
-			exit 0
-		fi
-	fi
 	# RAUC records the build and switches the boot order before apply writes
 	# pending.env, so a power cut between the two leaves an install with no
 	# pending.env: the board boots it, or, once U-Boot gave up on it, is back on the
@@ -328,28 +322,20 @@ boot_report() {
 	how=$(field "$p" HOW); how=${how:-updated}
 	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
 	if [ "$(rauc_build)" = "$build" ]; then
-		# Whether this boot passed is slot-health's verdict, which this runs after: active
-		# once it passed (RemainAfterExit), failed when it did not. Not RAUC's boot_status,
-		# which calls a slot good while BOOT_ORDER names it with attempts left, so it reads
-		# good on the boots that fail too.
-		# Passed and still on trial means rauc's mark-good failed: U-Boot can still go back.
-		verdict=$(systemctl is-active microduck-slot-health.service 2>/dev/null || true)
-		if [ "$verdict" = active ] && { ! on_trial || marked_good; }; then
-			r="$how to $version"
-		elif on_trial; then
-			# Not an outcome yet: the slot boots again, to pass or to go back. Keeping
-			# pending.env lets the boot that settles it say which -- "rolled back" from
-			# the old slot, or "updated to" once a boot passes and is marked good.
-			case $verdict in
-			active) say "$version passed its health check, but rauc did not mark it good; waiting for a boot that does" ;;
-			failed) say "$version failed its health check; retrying, and going back if it keeps failing" ;;
-			*) say "$version is still on trial, with no health check result this boot; waiting for the next" ;;
-			esac
+		# Trial before good: RAUC calls a slot good while BOOT_ORDER names it with attempts
+		# left, so a failed boot on trial reads good too. A boot that passed is off trial
+		# by now: this runs after rauc-mark-good.service, whose microduck-slot-trial leaves
+		# the slot alone in BOOT_ORDER. A failed trial boot normally never gets here (the
+		# reboot slot-health asks for cancels this unit, seen on the beta board); it does
+		# when slot-health fails without that reboot (its timeout, or the reboot call failing).
+		if on_trial; then
+			# Not an outcome yet: this boot failed and the slot reboots to try again, or to
+			# go back. Keeping pending.env lets the boot that settles it say which --
+			# "rolled back" from the old slot, or "updated to" once a boot passes.
+			say "$version failed its health check; retrying, and going back if it keeps failing"
 			phase idle
 			exit 0
-		elif [ "$verdict" != failed ] && booted_good; then
-			# No verdict from slot-health this boot (its job never ran, or systemctl could
-			# not say): RAUC's word, off trial, is all there is.
+		elif booted_good; then
 			r="$how to $version"
 		else
 			r="booted $version, but it did not pass the health check"
@@ -413,8 +399,8 @@ http() {
 	# State-changing requests need the X-Microduck header: a page on another origin
 	# cannot add it without a CORS preflight, which this never answers, so a web
 	# page cannot drive a robot on the visitor's LAN into an update.
-	# shortcut: no authentication beyond that; anyone on the LAN can update the
-	# robot. Production: the HF-authenticated dashboard path, or a pairing PIN.
+	# This header is a cross-origin guard, not authentication. The socket binds
+	# to loopback until an authenticated remote update path exists.
 	# One query parameter, build=<14 digits>; anything else in the query is ignored.
 	query=; case "$path" in *\?*) query=${path#*\?}; path=${path%%\?*} ;; esac
 	build=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^build=//p' | head -n 1)

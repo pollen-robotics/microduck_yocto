@@ -28,11 +28,45 @@ PACKAGE_ARCH = "${MACHINE_ARCH}"
 
 inherit packagegroup
 
+# The plugins mediad loads, by name, not the plugins-* sets: those pulled ~190
+# plugin subpackages (20.6 MiB on 2026-10-15) and, through rsvg, cairo, pango and
+# taglib, ~16 MiB of rendering and font libraries a headless robot never uses --
+# with their CVEs (libsoup and sqlite through -soup alone). The image also puts
+# the sets' -meta packages in BAD_RECOMMENDATIONS, or each set's main package
+# would pull its -meta back in: gstreamer1.0-plugins-packaging.inc
+# RRECOMMENDS:${PN} += "${PN}-meta".
+#
+# Measured, not read off the code: the libgst*.so in mediad's /proc/<pid>/maps on
+# a beta board (daemon 0.18.8, 2026-11-09), idle and then during a WebRTC session
+# from an on-board `gst-launch-1.0 webrtcsrc` viewer:
+#
+#   idle     app coreelements debugutilsbad rockchipmpp rswebrtc rtp rtpmanager
+#            video4linux2 videoconvertscale videoparsersbad videorate
+#   session  + dtls nice rsrtp sctp srtp webrtc
+#
+# coreelements is gstreamer1.0, rs* is gstreamer1.0-plugins-rs (microduck-daemon
+# RDEPENDS on it), nice is libnice (plugins-bad-webrtc RDEPENDS on it, see the
+# bbappend), rockchipmpp is gstreamer1.0-rockchip. Plus two mediad creates only
+# sometimes, so the measurement could miss them: videoflip (plugins-good
+# videofilter) when the camera is mounted rotated, and videotestsrc when there is
+# no camera. A plugin missing here fails at runtime, not at build time: when a
+# pipeline changes, measure again rather than guess.
 RDEPENDS:${PN} = " \
     gstreamer1.0 \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-base-app \
+    gstreamer1.0-plugins-base-videoconvertscale \
+    gstreamer1.0-plugins-base-videorate \
+    gstreamer1.0-plugins-base-videotestsrc \
+    gstreamer1.0-plugins-good-rtp \
+    gstreamer1.0-plugins-good-rtpmanager \
+    gstreamer1.0-plugins-good-video4linux2 \
+    gstreamer1.0-plugins-good-videofilter \
+    gstreamer1.0-plugins-bad-debugutilsbad \
+    gstreamer1.0-plugins-bad-dtls \
+    gstreamer1.0-plugins-bad-sctp \
+    gstreamer1.0-plugins-bad-srtp \
+    gstreamer1.0-plugins-bad-videoparsersbad \
+    gstreamer1.0-plugins-bad-webrtc \
     gstreamer1.0-rockchip \
     rockchip-mpp \
     rockchip-librga \
@@ -94,8 +128,3 @@ RDEPENDS:${PN} = " \
 #
 # webrtcsink is not listed here: it is gstreamer1.0-plugins-rs, our own recipe
 # (recipes-multimedia/gstreamer), which microduck-daemon RDEPENDS on.
-#
-# TODO trim: the plugins-* meta packages pull ~190 plugin subpackages (20.6 MiB on
-# 2026-10-15) and, through rsvg, cairo, pango and taglib, ~16 MiB of rendering and
-# font libraries a headless robot never uses. mediad exists now, so the fix is
-# known: depend on the subpackages of the elements its pipelines use, not the metas.

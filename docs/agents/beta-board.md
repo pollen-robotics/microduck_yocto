@@ -188,7 +188,8 @@ mode talks to. Flashing goes through it, with `rkdeveloptool`.
    **bytes**, not sectors: `rl 0 33554432 first32M.img` reads the first 32 MiB.
    That is the cheap backup of a board's bootloader area before reflashing.
 
-   The `.wic` is sparse at 12.1 GiB, and `wl` writes every byte of it, zeros
+   The `.wic` is sparse at 9.1 GiB (12.1 before the 2026-11-09 layout), and `wl`
+   writes every byte of it, zeros
    included, so expect minutes rather than seconds over USB 2.
 
 ### A board stuck in maskrom
@@ -274,7 +275,7 @@ Each step assumes the ones before it passed.
 
 The newest daemon release unless the build names one (README.md, "Which daemon
 the image seeds"; a CI run's summary has a `daemon:` line), with
-`microduck-policies_v8.bb`, the policy set releases 0.16.2 onwards name as their
+`microduck-policies_v9.bb`, the policy set releases 0.19.0 onwards name as their
 floor. `tofd` drives the ToF over SPI from 0.16.0 (microduck#364), so this board
 needs 0.16.0 or later. Every release from 0.15.3 builds on wrynose's Rust 1.94.1;
 0.15.1 and 0.15.2 needed 1.99. A robot with network still converges to newer

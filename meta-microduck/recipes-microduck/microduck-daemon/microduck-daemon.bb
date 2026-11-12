@@ -172,6 +172,14 @@ DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins
 # pet-detect.
 CARGO_BUILD_FLAGS += "--workspace --exclude xtask --exclude test-support --exclude duckctl --exclude duck-ether"
 
+# Every daemon compiles in the commit it was built from (`option_env!("DUCK_REVISION")`
+# in duck-ipc-proto's build identity) and says it at startup. The daemon's CI sets it;
+# this recipe did not, so every image-built daemon logged "rev unknown, not a CI
+# build" -- on a release image, of a release build. SRCREV_daemon is exactly the
+# commit CI built that release from (see above), so it is the same value CI stamps.
+# Not DUCK_BUILD_TIME: a wall-clock time would make the image unreproducible.
+export DUCK_REVISION = "${MICRODUCK_DAEMON_SRCREV}"
+
 # Both units hard-require this group; updater/systemd/sysusers.d/robot.conf exists
 # upstream to create it at first boot. Creating it at image build time instead is
 # deterministic and does not depend on sysusers ordering, so that file is not
@@ -253,10 +261,16 @@ USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport a
 # SYSTEMD_PACKAGES has to name both, since it otherwise defaults to ${PN} alone
 # and padd.service would be installed but never enabled.
 #
+# duck-gateway is how the app reaches the camera and controls since 0.19.0:
+# mediad listens on loopback only, and the gateway authenticates a phone with
+# the setup code before forwarding to it. On a robot without a setup code it
+# exits 0 at start and stays stopped, so it costs nothing on the PIN path and
+# does not show up in `systemctl --failed`.
+#
 # robot-boot-check.service has no [Install] by design -- only its timer starts it
 # -- so the timer is what gets enabled.
 SYSTEMD_PACKAGES = "${PN} ${PN}-padd"
-SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service robot-boot-check.timer microduck-voice-bank.service"
+SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service duck-gateway.service robot-boot-check.timer microduck-voice-bank.service"
 SYSTEMD_SERVICE:${PN}-padd = "padd.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
@@ -294,6 +308,24 @@ do_install:append() {
 		[ -e "$b" ] || continue
 		mv "$b" ${D}/opt/robot/daemon/releases/${PV}/bin/
 	done
+
+	# The data files robotd reads from its release tree. This mirrors the runtime
+	# --include lines of the daemon's .github/workflows/_build-release.yml, which
+	# nothing checks: a file added there and missed here is absent only on freshly
+	# flashed robots (an update extracts the official tar), so keep them in step.
+	#
+	# The detector models (pick-up pause, petting detector). From ${S}, not a
+	# pinned copy: a detector's input is this loop's own feature row, so it must
+	# match the binaries' SRCREV.
+	install -d ${D}/opt/robot/daemon/releases/${PV}/models
+	install -m 0644 ${S}/duck-control/models/*.onnx ${S}/pet-detect/models/*.onnx \
+		${D}/opt/robot/daemon/releases/${PV}/models/
+	# The shipped emotions. robotd says nothing when this directory is missing --
+	# it just has none. Absent before daemon 0.18.8, hence the test.
+	if [ -d ${S}/robotd/emotions ]; then
+		install -d ${D}/opt/robot/daemon/releases/${PV}/emotions
+		install -m 0644 ${S}/robotd/emotions/* ${D}/opt/robot/daemon/releases/${PV}/emotions/
+	fi
 	ln -snf releases/${PV} ${D}/opt/robot/daemon/current
 	ln -snf releases/${PV} ${D}/opt/robot/daemon/golden
 
@@ -352,6 +384,7 @@ do_install:append() {
 	install -m 0644 ${S}/tof/systemd/tofd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/nfc/systemd/nfcd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/netpadd/systemd/netpadd.service ${D}${systemd_system_unitdir}/
+	install -m 0644 ${S}/duck-gateway/systemd/duck-gateway.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/padd/systemd/padd.service ${D}${systemd_system_unitdir}/
 
 	# The boot recovery net, verbatim from the release: the timer runs
@@ -607,8 +640,14 @@ RRECOMMENDS:${PN}:append:aarch64 = " onnxruntime"
 # image installs through neither hooks/postinstall nor scripts/install.sh; the recipe
 # carries the rest of the story. Bump it with POLICY_VERSION in the daemon's own
 # scripts/seed-policies.sh (v5 at 0.13.0 to 0.15.1, v7 from 0.15.2 to 0.16.1, v8 from
-# 0.16.2).
+# 0.16.2 to 0.18.8, v9 from 0.19.0).
 RDEPENDS:${PN} += "microduck-policies"
+
+# The duck detector's model, seeded for the same reason as the policy set, so the
+# detector works offline from the first boot. RRECOMMENDS: the detector is off by
+# default and mediad runs fine without a model. Bump it with DETECTOR_VERSION in the
+# daemon's scripts/seed-detector.sh.
+RRECOMMENDS:${PN} += "microduck-detector"
 
 # RAUC marks a slot good only if the same check robot-boot-check makes passes:
 # its own recipe, installed wherever the daemon is.

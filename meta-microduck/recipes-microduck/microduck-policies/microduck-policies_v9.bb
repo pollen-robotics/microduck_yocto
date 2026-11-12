@@ -48,13 +48,19 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7ca
 # `version` against its own pin, and exits 0 for anything at or above it. A set from
 # another repo, or one with no record, it refuses to touch at all.
 
-# The pin is `PV`, so it is in the filename: microduck-policies_v8.bb. And it belongs to
+# The pin is `PV`, so it is in the filename: microduck-policies_v9.bb. And it belongs to
 # the daemon rather than to us -- `POLICY_VERSION` in the release's own
 # scripts/seed-policies.sh, which an xtask test holds against
 # [workspace.metadata.policies] in Cargo.toml. It was v5 from daemon 0.13.0 to 0.15.1, v7
 # from 0.15.2 to 0.16.1 (velstand steers the trunk while standing; sitstand no longer
-# tips backward), and is v8 from 0.16.2 (velstand gets up from a fall smoothly and
-# tracks yaw commands), so rename this file in step with a daemon bump.
+# tips backward), v8 from 0.16.2 to 0.18.8 (velstand gets up from a fall smoothly and
+# tracks yaw commands), and is v9 from 0.19.0, so rename this file in step with a daemon
+# bump.
+#
+# v9 is a rollback, not new weights: velstand.onnx and manifest.json are byte-identical
+# to v7's (the checksums below are v7's), because v8's velstand was worse on the real
+# robot. It is a new number rather than a re-tag of v7 because the seeder only ever
+# moves a board *up* -- a board already on v8 would never go back to a set called v7.
 #
 # Seeding *below* what the daemon names is the one thing that actively breaks: its
 # defaults name files only the newer set carries -- velstand.onnx is exactly such a file,
@@ -65,9 +71,11 @@ POLICY_REPO = "pollen-robotics/microduck-policies"
 
 # Fetched by commit, recorded as the tag. A Hub tag is a mutable ref -- it can be moved
 # onto different weights -- and "reproducible" is the reason this tree pins every layer
-# to a commit too. `.source` still says `v8`, because that is the string seed-policies.sh
+# to a commit too. `.source` still says `v9`, because that is the string seed-policies.sh
 # and `robotctl policy check` compare against.
-POLICY_REV = "665ae4eb20bfe13bca1ef4ea6d4bb6b4a096e448"
+# The Hub's refs API lists tag v9 at 8dc9feca: that is the annotated tag object, which
+# peels to this commit (the same holds for v7, listed at f745f108 and pinned at 6677ec00).
+POLICY_REV = "283771bcb3690a0a94a288c108365d9b630d21e4"
 POLICY_BASE = "https://huggingface.co/${POLICY_REPO}/resolve/${POLICY_REV}"
 
 # The whole set, not the subset robotd's defaults happen to name today.
@@ -105,8 +113,8 @@ SRC_URI = "\
 # The Hub stores these in LFS, and an LFS object's oid *is* its sha256 -- so these came
 # from the tree listing at ${POLICY_REV} and were confirmed against the downloaded bytes,
 # rather than being taken on trust from one of the two.
-SRC_URI[manifest.sha256sum] = "c566390738dd90a54c1e2de829aaab0e904c636949e2c2c6158ee7bbb889b818"
-SRC_URI[velstand.sha256sum] = "2fc7f8ee6acd7d0d3f66a99927b5d5a56589aeed02ec714de329b252d5ccf492"
+SRC_URI[manifest.sha256sum] = "5c6a73f95f388f131aaef570f6113f0d36b84a72d5755662cd57e67adf7fd24c"
+SRC_URI[velstand.sha256sum] = "ce894d30b3343036d499bfac1102bdaa58d59a21c1b58401ecb70fb6a2f63e0a"
 SRC_URI[alpha_walking.sha256sum] = "e36332d383997d51401897734cd3e79cf5038406feddb18b4d57ecfb141daa6c"
 SRC_URI[alpha_stand.sha256sum] = "1569268713e40deea795dd2922dba50d3621e15a872855408b6b1b125b1c094b"
 SRC_URI[alpha_sitstand.sha256sum] = "a6f102d9fd655782ba85bfffe18175c34621da719cffcdd673be7982a06fc254"
