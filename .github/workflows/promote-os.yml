@@ -133,9 +133,9 @@ jobs:
             echo "$(field SHA256 "$m/manifest.env")  $m/candidate.raucb" | sha256sum -c -
 
             # The shipping card from the same job: microduck-image-<machine>, not
-            # microduck-image-dev-<machine>. The loader too, but not the Zero 3W's, as
-            # build-image.yml does: what `rkdeveloptool db` needs for a beta main
-            # board (face board V1.0 included) in maskrom.
+            # microduck-image-dev-<machine>. The loader too, as build-image.yml does:
+            # what `rkdeveloptool db` needs for a beta main board (face board V1.0
+            # included) in maskrom.
             mkdir "$m/assets"
             files=$(hf buckets ls "$cache/deploy/$job/" | awk '{print $NF}')
             printf '%s\n' "$files" \
@@ -143,14 +143,9 @@ jobs:
               | while read -r p; do
                   hf buckets cp "hf://buckets/$cache/$p" "$m/assets/${p##*/}" > /dev/null
                 done
-            if [ "$m" = microduck-zero3 ]; then
-              rm -f "$m"/assets/loader.bin-*
-            else
-              mv "$m"/assets/loader.bin-* "$m/assets/$m-loader.bin"
-            fi
-            want=4; [ "$m" = microduck-zero3 ] && want=3
-            [ "$(ls "$m/assets" | wc -l)" -eq "$want" ] || {
-              echo "$m: expected $want card files in deploy/$job (pruned after 14 days?), got:"; ls -l "$m/assets"; exit 1; }
+            mv "$m"/assets/loader.bin-* "$m/assets/$m-loader.bin"
+            [ "$(ls "$m/assets" | wc -l)" -eq 4 ] || {
+              echo "$m: expected 4 card files in deploy/$job (pruned after 14 days?), got:"; ls -l "$m/assets"; exit 1; }
             (cd "$m/assets" && sha256sum -c *.wic.zst.sha256sum)
             # The daemon the card actually carries, for the notes: the image's package
             # manifest has "microduck-daemon <arch> <version>". Beside assets/, never in
@@ -330,8 +325,7 @@ jobs:
               echo "| Board | Daemon | Update bundle | Card image |"
               echo "|---|---|---|---|"
               while read -r m _ _; do
-                loader=; [ "$m" = microduck-zero3 ] || loader=", and \`$m-loader.bin\` for \`rkdeveloptool\`"
-                echo "| \`$m\` | $(cat "$m/daemon") | \`$TAG-${m#microduck-}.raucb\` | \`microduck-image-$m.rootfs-*.wic.zst\` + \`.wic.bmap\`$loader |"
+                echo "| \`$m\` | $(cat "$m/daemon") | \`$TAG-${m#microduck-}.raucb\` | \`microduck-image-$m.rootfs-*.wic.zst\` + \`.wic.bmap\`, and \`$m-loader.bin\` for \`rkdeveloptool\` |"
               done < boards.txt
               echo
               echo "- The \`.raucb\` files are the update, signed with the production key. Robots on \`stable\` get it by themselves; \`rauc install\` it on one without network."

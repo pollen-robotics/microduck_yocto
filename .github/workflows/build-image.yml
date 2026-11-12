@@ -27,7 +27,7 @@ name: build-image
 # KEEP_DAYS (see the prune step), and the card image is the compressed
 # .wic.zst + .wic.bmap; the 13 GB plain .wic is not uploaded.
 #
-# Publishing a GitHub release builds every board from its tag and attaches what
+# Publishing a GitHub release builds the beta boards from its tag and attaches what
 # a person needs to flash or update one to the release itself (see the attach
 # step), so a tagged version never needs the bucket or a rebuild.
 
@@ -195,7 +195,7 @@ jobs:
       # assets are too. Names already say the machine, except the loader, which
       # goes up as <machine>-loader.bin: it is what `rkdeveloptool db` needs for a
       # beta main board in maskrom (docs/agents/beta-board.md), face board V1.0
-      # included. Not the Zero 3W's: that one is flashed as a card.
+      # included. A release builds no Zero 3W (see the matrix).
       - name: Attach the image to the release
         if: success() && github.event_name == 'release'
         env:
@@ -217,14 +217,9 @@ jobs:
             | while read -r p; do
                 hf buckets cp "hf://buckets/pollen-robotics/microduck-yocto-cache/$p" "./${p##*/}"
               done
-          if [ "$MACHINE" = microduck-zero3 ]; then
-            rm -f loader.bin-*
-          else
-            mv loader.bin-* "$MACHINE-loader.bin"
-          fi
+          mv loader.bin-* "$MACHINE-loader.bin"
           # A missing .raucb or .bmap must not publish a release that looks complete.
-          want=6; [ "$MACHINE" = microduck-zero3 ] && want=5
-          [ "$(ls | wc -l)" -eq "$want" ] || { echo "expected $want assets, got:"; ls -l; exit 1; }
+          [ "$(ls | wc -l)" -eq 6 ] || { echo "expected 6 assets, got:"; ls -l; exit 1; }
           sha256sum -c *.wic.zst.sha256sum
           gh release upload "$TAG" * --clobber -R "$GITHUB_REPOSITORY"
           echo "Attached to release $TAG:" >> "$GITHUB_STEP_SUMMARY"
