@@ -253,8 +253,10 @@ The CA's private key is kept offline; only a signing certificate it issued
 
 `microduck-osupdate` picks its channel from the keyring: `dev` if
 `/usr/lib/rauc/ca-dev.cert.pem` exists, `stable` if not. On such a production
-board it also refuses a build older than the installed one, because the channel
-manifests are unsigned; going back there is `switch`, to the other slot.
+board it also refuses a build older than the installed one; going back there is
+`switch`, to the other slot. The channel manifests are unsigned, so every board
+also refuses a bundle whose signed build (`rauc info`'s `RAUC_MF_BUILD`) is not
+the manifest's `BUILD`: a manifest cannot pass an old bundle off as a new one.
 
 Traps:
 

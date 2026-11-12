@@ -14,11 +14,13 @@
 # key and every value checked against a pattern -- never sourced. The bundle is
 # what RAUC verifies (X.509 signature, compatible, the install-check hook); the
 # manifest only says which bundle.
-# The manifest is unsigned, so whoever can write the bucket can point a robot at
-# an older, validly signed bundle. A production board refuses any build older
+# The manifest is unsigned, but its BUILD must be the bundle's signed build or
+# apply refuses it, so whoever can write the bucket cannot pass an older, validly
+# signed bundle off as a newer one. A production board refuses any build older
 # than the one it runs (see apply).
-# shortcut: a dev board takes the downgrade; it is a bench board. Sign the
-# manifest if the bucket's write access ever widens.
+# shortcut: a dev board takes the downgrade; it is a bench board. And a bucket
+# writer can still hold a board on an old build by never moving the channel. Sign
+# the manifest, with an expiry, if the bucket's write access ever widens.
 set -eu
 
 BASE_URL=https://huggingface.co/buckets/pollen-robotics/microduck-os/resolve
@@ -30,7 +32,7 @@ if production; then CHANNEL=stable; else CHANNEL=dev; fi
 MIN_BATTERY_PCT=30
 # Root-owned local configuration, so sourcing it is fine (unlike the manifest).
 [ ! -r /etc/microduck-osupdate.conf ] || . /etc/microduck-osupdate.conf
-# Overridable for scripts/test-osupdate-boot-report.sh only.
+# Overridable for scripts/test-osupdate-*.sh only.
 STATE=${MICRODUCK_OSUPDATE_STATE:-/var/lib/robot/osupdate}
 mkdir -p "$STATE"
 
@@ -69,7 +71,8 @@ other_installed() { other_slot_json | grep -o '"installed":{"timestamp":"[^"]*"'
 # Good: RAUC still calls it good, or microduck-slot-trial recorded its OS as good on
 # this board. RAUC alone is not enough: once a slot's trial ends, BOOT_ORDER names only
 # that slot, and RAUC reads every slot BOOT_ORDER does not name as bad.
-GOOD_RECORD=/var/lib/robot/slot-health/good
+# Overridable for scripts/test-osupdate-apply.sh only.
+GOOD_RECORD=${MICRODUCK_SLOT_GOOD:-/var/lib/robot/slot-health/good}
 # A BOOT_<slot>_LEFT of zero, or none: U-Boot writes hex ("0x0"), RAUC decimal.
 left_zero() { [ -z "$1" ] || printf '%s' "$1" | grep -Eqx '(0x)?0+'; }
 # Is the booted slot still on trial? First in BOOT_ORDER, with the other slot listed
@@ -108,6 +111,13 @@ battery_ok() {
 
 # field FILE KEY: the first KEY= line's value.
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
+
+# bundle_build FILE: the build in the bundle's signed manifest (RAUC_BUNDLE_BUILD),
+# empty if RAUC will not verify the bundle. RAUC's error goes to $STATE/rauc.log.
+bundle_build() {
+	rauc info --output-format=shell "$1" 2> "$STATE/rauc.log" |
+		sed -n "s/^RAUC_MF_BUILD='\{0,1\}\([0-9]\{14\}\)'\{0,1\}\$/\1/p"
+}
 
 board_machine() {
 	m=$(machine)
@@ -189,6 +199,7 @@ apply() {
 	build=$(field "$a" BUILD); url=$(field "$a" URL); sha256=$(field "$a" SHA256)
 	size=$(field "$a" SIZE); version=$(field "$a" VERSION)
 	installed=$(installed_build)
+	hint=; production && hint=" (this board takes production-signed stable builds only)"
 	[ "$build" != "$installed" ] || fail "build $build is already running"
 	# Build ids are UTC timestamps, so newer is larger. A flashed slot has none.
 	# Going back on a production board is `switch`, to the other slot as it is.
@@ -212,6 +223,14 @@ apply() {
 		fail "download failed (it resumes on the next try)"
 	[ "$(wc -c < "$part")" = "$size" ] || { rm -f "$part"; fail "downloaded size is not $size"; }
 	[ "$(sha256sum "$part" | cut -d' ' -f1)" = "$sha256" ] || { rm -f "$part"; fail "sha256 mismatch"; }
+	# Every check above took the unsigned manifest's BUILD on trust; hold it to the
+	# bundle's signed one before the other slot is touched.
+	signed=$(bundle_build "$part")
+	if [ "$signed" != "$build" ]; then
+		rm -f "$part"
+		[ -n "$signed" ] || fail "rauc refused it: $(tail -n 1 "$STATE/rauc.log")$hint"
+		fail "the bundle is build $signed, but its manifest says $build"
+	fi
 
 	phase installing; say "installing $version"
 	from=$(booted_name)
@@ -237,7 +256,6 @@ apply() {
 			! left_zero "$(fw_printenv -n "BOOT_${to}_LEFT" 2>/dev/null || true)"; then
 			printf '%s\n' "$record" >> "$GOOD_RECORD"
 		fi
-		hint=; production && hint=" (this board takes production-signed stable builds only)"
 		fail "rauc refused it: $(grep -v '^ *[0-9]*% ' "$STATE/rauc.log" | tail -n 1)$hint"
 	fi
 	rm -f "$part"
