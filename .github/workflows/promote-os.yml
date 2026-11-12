@@ -50,8 +50,9 @@ concurrency:
 
 env:
   # Every board released, in this order. A new machine goes here and in
-  # build-image.yml's matrix.
-  MACHINES: microduck-zero3 microduck-beta microduck-face-board-v1
+  # build-image.yml's matrix. Not the Zero 3W: CI builds it only on demand, so
+  # it has no candidate from a pushed commit.
+  MACHINES: microduck-beta microduck-face-board-v1
 
 jobs:
   promote:

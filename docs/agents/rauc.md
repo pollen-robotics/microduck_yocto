@@ -278,8 +278,9 @@ Traps:
    from there it takes no dev or candidate build. Go back with `switch` (the
    other slot), not with a download.
 3. `promote-os.yml` (Actions → promote-os → Run workflow, `production`
-   environment) releases one commit for every board: a `patch`/`minor`/`major`
-   bump, and a commit (empty = the commit of the Zero 3W's newest candidate).
+   environment) releases one commit for every beta board (not the Zero 3W, which
+   CI builds only on demand): a `patch`/`minor`/`major`
+   bump, and a commit (empty = the commit of the beta's newest candidate).
    Each board takes its newest candidate built from that commit; a board without
    one fails the run before anything is signed. There are no release candidates;
    candidate builds tested on dev boards play that part. It re-signs the bundles

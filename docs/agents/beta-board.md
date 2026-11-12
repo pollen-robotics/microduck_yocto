@@ -141,7 +141,7 @@ HFJOB_MACHINE=microduck-beta scripts/build-hfjob.sh      # HF Jobs
 ```
 
 or `machine: microduck-beta` in the `build-image` workflow dispatch. A push to
-`main` builds every board (Zero 3W, beta, face board V1.0) and publishes each to `dev`. Artifacts land in
+`main` builds the beta and face board V1.0 (the Zero 3W only on dispatch) and publishes each to `dev`. Artifacts land in
 `tmp/deploy/images/microduck-beta/`.
 
 ## Flash the eMMC
