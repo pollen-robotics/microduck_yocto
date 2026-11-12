@@ -1,10 +1,11 @@
 SUMMARY = "microduck OS update bundle"
 DESCRIPTION = "Signed RAUC bundle carrying one rootfs slot image."
 
-# The newest OS release (microduck-os-v<X.Y.Z>), which build-hfjob.sh and
-# build-local.sh read from the tags (scripts/os-release.sh), so a release needs
-# no bump here. `rauc info` reports it as version=. Defaulted in microduck.conf.
-PV = "${MICRODUCK_OS_VERSION}"
+# `rauc info`'s version= is the build id, the same one the image's os-release
+# shows. A release number cannot go here: promote-os.yml chooses it when it
+# re-signs the bundle, and re-signing changes nothing inside the bundle.
+RAUC_BUNDLE_VERSION = "${RAUC_BUNDLE_BUILD}"
+RAUC_BUNDLE_VERSION[vardepsexclude] = "DATETIME"
 
 inherit bundle
 

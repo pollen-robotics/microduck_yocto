@@ -178,9 +178,12 @@ About 30 seconds after power-on:
   desktops you have to enable the new wired connection).
   ```sh
   ssh microduck@192.168.42.1        # password: microduck
-  cat /etc/os-release               # the release you flashed
+  cat /etc/os-release               # BUILD_ID: the build you flashed
   robotctl health
   ```
+  The image names its build, never a release: a release number is chosen when
+  a tested build is promoted, after the image was built. The release notes
+  name each board's build ("Stable OS build ... for ...").
   There is also a serial console on the same cable, `/dev/ttyACM0` on the PC,
   with the same login. The shipping image answers ssh only on this cable; the
   dev image also does over wifi.
