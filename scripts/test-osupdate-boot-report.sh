@@ -33,6 +33,10 @@ pass=0; fail=0
 STATE=$work/state ENVDIR=$work/env
 
 # booted slot, its build, its boot_status, the other slot's build.
+# boot_status as RAUC's U-Boot backend gives it: good while BOOT_ORDER names the slot
+# and its BOOT_<slot>_LEFT is above zero, whether or not a boot of it passed. U-Boot
+# takes one attempt before every boot, so a slot on trial reads good on its first two
+# boots (0x2, 0x1) and bad on its last (0x0).
 rauc() {
 	other=B; [ "$1" = A ] || other=A
 	RAUC_JSON=$(printf '{"compatible":"microduck-zero3","booted":"%s","slots":[{"rootfs.0":{"bootname":"%s","state":"inactive","boot_status":"good","slot_status":{"bundle":{"build":"%s"}}}},{"rootfs.1":{"bootname":"%s","state":"booted","boot_status":"%s","slot_status":{"bundle":{"build":"%s"}}}}]}' \
@@ -73,29 +77,33 @@ applied; rauc B 200 good 100; uboot B 3 3
 report
 check "the new slot passed: updated" "result=updated to 1.2.0" pending=no phase=idle
 
-applied; rauc B 200 bad 100; uboot "B A" 3 0x2
+applied; rauc B 200 good 100; uboot "B A" 3 0x2
 report
 check "the new slot failed on trial: no result yet, the update is kept" result=none pending=yes phase=idle
-rauc B 200 bad 100; uboot "B A" 3 0x1
+rauc B 200 good 100; uboot "B A" 3 0x1
 report
 check "  ... and failed again: still none" result=none pending=yes
+rauc B 200 bad 100; uboot "B A" 3 0x0
+report
+check "  ... and a third time: still none" result=none pending=yes
 rauc A 100 good 200; uboot "B A" 0x2 0x0
 report
 check "  ... then U-Boot went back to A: rolled back" \
 	"result=rolled back: 1.2.0 did not come up, back on slot A" pending=no phase=idle
 
-applied; rauc B 200 bad 100; uboot "B A" 3 0x2
+applied; rauc B 200 good 100; uboot "B A" 3 0x2
 report
+check "failed once on trial: no result yet" result=none pending=yes
 rauc B 200 good 100; uboot B 3 3
 report
-check "failed once on trial, then passed: updated" "result=updated to 1.2.0" pending=no
+check "  ... then passed: updated" "result=updated to 1.2.0" pending=no
 
-applied; rauc B 200 bad 100; uboot "B A" 0 0x2
+applied; rauc B 200 bad 100; uboot "B A" 0 0x0
 report
 check "failed with the other slot spent (no going back): final" \
 	"result=booted 1.2.0, but it did not pass the health check" pending=no
 
-applied; rauc B 200 bad 100; uboot B 3 0x2
+applied; rauc B 200 bad 100; uboot B 3 0x0
 report
 check "failed alone in BOOT_ORDER (not on trial): final" \
 	"result=booted 1.2.0, but it did not pass the health check" pending=no
@@ -135,7 +143,7 @@ cut installing; rauc B 200 good 100; uboot B 3 3
 report
 check "cut after RAUC switched, the new slot passed: updated" "result=updated to 1.2.0" pending=no
 
-cut installing; rauc B 200 bad 100; uboot "B A" 3 0x2
+cut installing; rauc B 200 good 100; uboot "B A" 3 0x2
 report
 check "cut after RAUC switched, the new slot failed on trial: kept" result=none pending=yes
 rauc A 100 good 200; uboot "B A" 0x2 0x0

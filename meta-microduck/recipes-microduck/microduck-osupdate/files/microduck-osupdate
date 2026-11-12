@@ -322,15 +322,21 @@ boot_report() {
 	how=$(field "$p" HOW); how=${how:-updated}
 	# RAUC's record, like the BUILD that switch_slot wrote: empty for a flashed slot.
 	if [ "$(rauc_build)" = "$build" ]; then
-		if booted_good; then
-			r="$how to $version"
-		elif on_trial; then
+		# Trial before good: RAUC calls a slot good while BOOT_ORDER names it with attempts
+		# left, so a failed boot on trial reads good too. A boot that passed is off trial
+		# by now: this runs after rauc-mark-good.service, whose microduck-slot-trial leaves
+		# the slot alone in BOOT_ORDER. A failed trial boot normally never gets here (the
+		# reboot slot-health asks for cancels this unit, seen on the beta board); it does
+		# when slot-health fails without that reboot (its timeout, or the reboot call failing).
+		if on_trial; then
 			# Not an outcome yet: this boot failed and the slot reboots to try again, or to
 			# go back. Keeping pending.env lets the boot that settles it say which --
 			# "rolled back" from the old slot, or "updated to" once a boot passes.
 			say "$version failed its health check; retrying, and going back if it keeps failing"
 			phase idle
 			exit 0
+		elif booted_good; then
+			r="$how to $version"
 		else
 			r="booted $version, but it did not pass the health check"
 		fi
