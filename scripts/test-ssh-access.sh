@@ -40,7 +40,7 @@ Accept=yes
 WantedBy=sockets.target
 EOF
 printf '[Service]\nExecStart=/usr/bin/cat\nStandardInput=socket\n' > "$work/sshd@.service"
-# Laid out as the package installs it: microduck-ssh-access.bb's do_install.
+# Laid out as the package installs it: microduck-ssh-access_1.0.bb's do_install.
 cat > "$work/Dockerfile" <<'EOF'
 FROM debian:trixie
 RUN apt-get -qq update && apt-get -qq install -y --no-install-recommends systemd iproute2 >/dev/null
