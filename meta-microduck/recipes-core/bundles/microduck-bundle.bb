@@ -28,7 +28,7 @@ RAUC_BUNDLE_SLOTS = "rootfs"
 # new kernel in the slot would never run, against its own modules. See the hook.
 SRC_URI = "file://microduck-bundle-hook"
 # Fetching anything makes do_populate_lic demand a checksum; bundle.bbclass only
-# sets LICENSE ?= "MIT". Same line as microduck-data.bb.
+# sets LICENSE ?= "MIT". Same line as the microduck-data recipe.
 LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
 RAUC_BUNDLE_HOOKS[file] = "microduck-bundle-hook"
 RAUC_BUNDLE_HOOKS[hooks] = "install-check"
