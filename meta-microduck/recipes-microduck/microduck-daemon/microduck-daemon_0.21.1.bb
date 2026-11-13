@@ -57,7 +57,7 @@ SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ss
 # atomics' try_update in mediad, and microduck#358 brought the floor back to 1.89
 # and recorded 1.94 as the ceiling in CONTRIBUTING.md. A release that needs a
 # newer Rust than that is a CI failure here, not a reason to pin an older one.
-SRCREV_daemon = "7fba12ed048d0d3a1c306ba8a2787a1a407b9974"
+SRCREV_daemon = "094d4bb4af31ec181156e1ea772437fdd7a55978"
 SRCREV_bmi088 = "bd113f317b14923f50f9a12a06678fe162b7fe06"
 SRCREV_FORMAT = "daemon_bmi088"
 
@@ -193,13 +193,15 @@ export DUCK_REVISION = "${SRCREV_daemon}"
 USERADD_PACKAGES = "${PN}"
 # nfcd is both the unit's User= and the group microduck-nfc's udev rule gives the
 # beta's reader (/dev/spidev1.0) to, so the daemon reaches it as its primary group.
-GROUPADD_PARAM:${PN} = "-r robot; -r robot-account; -r bluetooth; -r btd; -r mediad; -r tofd; -r padd; -r i2c; -r nfcd; -r netpadd"
+GROUPADD_PARAM:${PN} = "-r robot; -r robot-account; -r bluetooth; -r btd; -r mediad; -r tofd; -r padd; -r i2c; -r nfcd; -r netpadd; -r autod; -r mapd"
 USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport adapter' btd; \
                        -r -g mediad -d / -s /sbin/nologin -c 'Robot media and WebRTC gateway' mediad; \
                        -r -g tofd -d / -s /sbin/nologin -c 'Robot ToF sensor daemon' tofd; \
                        -r -g padd -d / -s /sbin/nologin -c 'Robot gamepad intent client' padd; \
                        -r -g nfcd -d / -s /sbin/nologin -c 'Robot NFC reader daemon' nfcd; \
-                       -r -g netpadd -d / -s /sbin/nologin -c 'Robot gamepad over UDP' netpadd"
+                       -r -g netpadd -d / -s /sbin/nologin -c 'Robot gamepad over UDP' netpadd; \
+                       -r -g autod -d / -s /sbin/nologin -c 'Robot autonomous brain' autod; \
+                       -r -g mapd -d / -s /sbin/nologin -c 'Robot onboard map' mapd"
 
 # mediad, tofd and padd get their users and groups even though their units are
 # not enabled here, because systemd refuses to start a unit whose User= or
@@ -218,13 +220,16 @@ USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport a
 #   nfcd     dialout robot          dialout already exists; it is the bench USB
 #                                   reader's /dev/ttyACM*
 #   netpadd  robot                  nothing else: the pad is on the network
+#   autod    robot                  nothing else: it talks to robotd and tofd over
+#                                   their sockets (AF_UNIX only)
+#   mapd     robot                  the same
 #
 # netpadd is enabled but stays down: its ExecCondition= runs only when
 # `[netpad] enabled` is set, and padd stands down for it then. Without the unit,
 # setting that key left the robot with no pad at all -- padd stood down because
 # the netpadd binary ships, and nothing took over.
 
-# All nine units, all enabled. The robot is the common case: a board with
+# Every unit the release ships, all enabled. The robot is the common case: a board with
 # servos, a camera, a ToF sensor and a gamepad should come up working, and
 # needing to remember an enable command per daemon is how a robot ends up half
 # running with nothing obviously wrong.
@@ -253,10 +258,17 @@ USERADD_PARAM:${PN} = "-r -g btd -d / -s /sbin/nologin -c 'Robot BLE transport a
 # exits 0 at start and stays stopped, so it costs nothing on the PIN path and
 # does not show up in `systemctl --failed`.
 #
+# autod and mapd are new in 0.21.0. autod is what acts on the autonomous mode
+# (robotd's `autonomous` switch, set by the NFC tag): the first 0.21.0 image had
+# their binaries -- the bin/ move below takes everything cargo built -- but not
+# their units or users, so the tag was accepted by robotd and nothing happened
+# (2026-11-13). The check at the end of the unit installs now fails the build on
+# any unit the release ships and this recipe does not install.
+#
 # robot-boot-check.service has no [Install] by design -- only its timer starts it
 # -- so the timer is what gets enabled.
 SYSTEMD_PACKAGES = "${PN} ${PN}-padd"
-SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service duck-gateway.service robot-boot-check.timer microduck-voice-bank.service"
+SYSTEMD_SERVICE:${PN} = "robotd.service updaterd.service configd.service btd.service mediad.service tofd.service nfcd.service netpadd.service duck-gateway.service autod.service mapd.service robot-boot-check.timer microduck-voice-bank.service"
 SYSTEMD_SERVICE:${PN}-padd = "padd.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
@@ -372,6 +384,8 @@ do_install:append() {
 	install -m 0644 ${S}/netpadd/systemd/netpadd.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/duck-gateway/systemd/duck-gateway.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${S}/padd/systemd/padd.service ${D}${systemd_system_unitdir}/
+	install -m 0644 ${S}/autod/systemd/autod.service ${D}${systemd_system_unitdir}/
+	install -m 0644 ${S}/mapd/systemd/mapd.service ${D}${systemd_system_unitdir}/
 
 	# The boot recovery net, verbatim from the release: the timer runs
 	# robot-boot-check a second after boot, which hands a release whose daemons did
@@ -383,6 +397,18 @@ do_install:append() {
 	install -d ${D}${prefix}/local/sbin
 	install -m 0755 ${S}/scripts/robot-boot-check ${D}${prefix}/local/sbin/
 	install -m 0755 ${S}/scripts/robot-rescue ${D}${prefix}/local/sbin/
+
+	# Every unit the release ships, installed. The binaries above follow cargo by a
+	# glob, the units are named one by one, so a release that adds a daemon builds
+	# cleanly into an image with its binary and no way to start it -- autod in
+	# 0.21.0. The unit and its User= also need SYSTEMD_SERVICE and USERADD_PARAM
+	# above, which this cannot check; scripts/bump-daemon.sh refuses such a release
+	# before anything builds.
+	for u in ${S}/*/systemd/*.service ${S}/*/systemd/*.timer; do
+		[ -e "$u" ] || continue
+		[ -e ${D}${systemd_system_unitdir}/"${u##*/}" ] || \
+			bbfatal "daemon ${PV} ships ${u#${S}/}, which this recipe does not install: add its install line, SYSTEMD_SERVICE entry and User="
+	done
 
 	install -m 0644 ${UNPACKDIR}/microduck-voice-bank.service ${D}${systemd_system_unitdir}/
 
