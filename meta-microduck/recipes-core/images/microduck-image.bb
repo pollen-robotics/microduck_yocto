@@ -140,6 +140,7 @@ IMAGE_INSTALL:append = " \
     u-boot-rockchip-env \
     microduck-data \
     microduck-osupdate \
+    microduck-factory-reset \
     packagegroup-microduck-media \
     alsa-utils-aplay \
     ldd \

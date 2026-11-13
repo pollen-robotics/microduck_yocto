@@ -265,7 +265,8 @@ do_install:append() {
 	#
 	#   /opt/robot/daemon/releases/<ver>/bin/...
 	#   current → releases/<ver>     units point here
-	#   golden  → releases/<ver>     never pruned; the rescue net reads it
+	#   golden  → releases/<ver>     never pruned (with `golden =` in updater.toml,
+	#                                set below); the rescue net reads it
 	#
 	# The units are installed verbatim, ExecStart untouched. That is the whole
 	# point of this change. They already say /opt/robot/daemon/current/bin/, and
@@ -411,6 +412,18 @@ do_install:append() {
 		${D}${sysconfdir}/robot/updater.toml
 	grep -q 'repo.*pollen-robotics/microduck_daemon' ${D}${sysconfdir}/robot/updater.toml \
 		|| bbfatal "updater.toml repo rewrite did not apply -- upstream format changed?"
+
+	# Golden is the release this image seeds -- the one the `golden` symlink above names.
+	# Upstream leaves the key commented out because it is only true of a board that has
+	# the release installed, and an image is the one place that knows it does. The link
+	# alone is not enough: with no key, updaterd's prune does not protect the release,
+	# removes it a couple of updates later, and leaves `golden` dangling, which
+	# robot-rescue, `update.resetToGolden` and microduck-factory-reset then all refuse.
+	# An OS update moves golden to the release the new image seeds; /opt/robot/daemon
+	# and this file are both on the slot, so they move together.
+	sed -i -e 's|^#\? *golden *= *".*"$|golden = "${PV}"|' ${D}${sysconfdir}/robot/updater.toml
+	[ "$(grep -c '^golden = "${PV}"$' ${D}${sysconfdir}/robot/updater.toml)" = 1 ] \
+		|| bbfatal "updater.toml golden rewrite did not apply exactly once -- upstream format changed?"
 
 	# minisign trust anchor. All three keys ship from the first image on purpose so
 	# key rotation never needs a reflash.

@@ -1,0 +1,3 @@
+# The face board's button (face-board-v1 DTS: gpio-keys node `face-keys`). Its
+# appearance starts the watcher, so the beta board, which has no button, never runs it.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="face-keys", TAG+="systemd", ENV{SYSTEMD_WANTS}+="microduck-factory-reset-button.service"

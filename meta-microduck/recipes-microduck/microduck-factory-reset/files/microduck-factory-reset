@@ -1,0 +1,235 @@
+#!/bin/sh
+# Put a robot back the way it left the factory: every owner's trace on the data
+# partition gone, and the daemon back on the release this image seeded (golden).
+#
+#   microduck-factory-reset button   watch the face button; a 10 s hold arms and reboots
+#   microduck-factory-reset arm      arm the reset and reboot (what the button does)
+#   microduck-factory-reset wipe     do the reset; run at boot, before anything uses
+#                                    /var/lib/robot, and only when armed
+#   microduck-factory-reset plan     print what `wipe` would remove and keep, change nothing
+#
+# **Why it lives in the OS image and not in the daemon.** A factory reset is the last
+# resort, for when everything else -- including a daemon release that will not come
+# up -- has failed. So nothing here may depend on a daemon release running, or even
+# being intact: the button is read by this script, and the wipe runs before the
+# daemons start.
+#
+# **Why arm-and-reboot rather than wiping in place.** Every daemon, BlueZ,
+# NetworkManager and journald hold files on the data partition open. At boot,
+# ordered before all of them, the partition is mounted and nothing else is using it.
+# And the marker is removed last, so a power cut mid-wipe means the next boot
+# finishes the job rather than coming up half-reset.
+#
+# What survives is a keep list, not a delete list: anything a future daemon starts
+# storing for its owner is wiped without this file having to learn about it. What is
+# kept is a fact about the board or the OS, never about who owned it.
+
+set -eu
+
+DATA=${MICRODUCK_FACTORY_RESET_DATA:-/var/lib/robot}
+DAEMON=${MICRODUCK_FACTORY_RESET_DAEMON:-/opt/robot/daemon}
+MARKER="$DATA/factory-reset"
+DEVICE=${MICRODUCK_FACTORY_RESET_DEVICE:-/dev/input/by-path/platform-face-keys-event}
+HOLD_SECONDS=${MICRODUCK_FACTORY_RESET_HOLD:-10}
+
+# Relative to $DATA. A directory listed whole is kept whole; `config/ble-psk` keeps
+# that one file and wipes the rest of config/ (the owner's name and pairing PIN).
+KEEP="
+lost+found
+weird-ble
+provision.env
+provision.log
+provision.outcome
+vetbook.json
+sounds
+rauc
+osupdate
+slot-health
+config/ble-psk
+factory-reset
+"
+# Why each one stays:
+#   lost+found          ext4's own
+#   weird-ble           a fact about this board's radio (setup-board.sh)
+#   provision.*         how the board was provisioned, for support
+#   vetbook.json        the robot's lifetime wear record: boots, power-offs, servo
+#                       hours. About the hardware, not the owner, and what support
+#                       needs most on a robot that comes back
+#   sounds              the voice bank, generated from the SoC serial
+#   rauc, osupdate,     the OS's slot and update state. Wiping them would make RAUC
+#   slot-health         forget which slot is good, under the OS it is running
+#   config/ble-psk      a dev board's setup key, not the owner's PIN
+#   factory-reset       the marker itself, removed last
+#
+# Everything else goes: wifi profiles (network/), Bluetooth bonds -- phones and
+# pads -- (bluetooth/), the owner's settings and policy choices (robotd.toml), the
+# robot's name and PIN (config/config.json), the Hugging Face login (hf-token),
+# installed community policies and emotions, the updater's pins, telemetry choice
+# and history (updater/), SSH host keys (ssh/, regenerated on boot), and the journal.
+
+say() { echo "microduck-factory-reset: $*"; }
+die() { say "$*" >&2; exit 1; }
+
+# Is $1 (relative) kept, or a directory on the way to something kept?
+kept() {
+	for k in $KEEP; do
+		[ "$1" = "$k" ] && return 0
+	done
+	return 1
+}
+leads_to_kept() {
+	for k in $KEEP; do
+		case "$k" in "$1"/*) return 0 ;; esac
+	done
+	return 1
+}
+
+# Walk $DATA, calling $1 on every path (relative) that the reset removes.
+walk() {
+	_act=$1 _dir=${2:-}
+	for p in "$DATA/${_dir:+$_dir/}"* "$DATA/${_dir:+$_dir/}".[!.]* "$DATA/${_dir:+$_dir/}"..?*; do
+		[ -e "$p" ] || [ -L "$p" ] || continue
+		rel=${p#"$DATA"/}
+		if kept "$rel"; then
+			continue
+		elif [ -d "$p" ] && [ ! -L "$p" ] && leads_to_kept "$rel"; then
+			walk "$_act" "$rel"
+			_act=$1   # restore after recursion clobbered the "locals"
+		else
+			"$_act" "$rel"
+		fi
+	done
+}
+
+print_remove() { echo "remove $1"; }
+do_remove() { rm -rf -- "${DATA:?}/$1"; }
+
+data_is_mounted() {
+	# Not `mountpoint`: busybox may not carry it. /proc/mounts escapes spaces as \040,
+	# and $DATA has none.
+	awk -v d="$DATA" '$2 == d { found = 1 } END { exit !found }' /proc/mounts
+}
+
+golden_target() {
+	t=$(readlink "$DAEMON/golden" 2>/dev/null) || return 1
+	[ -d "$DAEMON/$t" ] || return 1
+	echo "$t"
+}
+
+cmd_plan() {
+	[ -d "$DATA" ] || die "$DATA does not exist"
+	walk print_remove
+	for k in $KEEP; do
+		[ -e "$DATA/$k" ] && echo "keep   $k"
+	done
+	if t=$(golden_target); then
+		echo "daemon current -> $t (golden; now $(readlink "$DAEMON/current" 2>/dev/null || echo none))"
+	else
+		echo "daemon: no installed golden release; current left as it is"
+	fi
+}
+
+cmd_arm() {
+	[ "$(id -u)" = 0 ] || [ -n "${MICRODUCK_FACTORY_RESET_DATA:-}" ] || die "must run as root"
+	data_is_mounted || [ -n "${MICRODUCK_FACTORY_RESET_DATA:-}" ] \
+		|| die "$DATA is not mounted; there is no data partition to reset"
+	say "armed: the next boot erases this robot's owner data and returns it to golden"
+	: > "$MARKER"
+	sync
+	if [ "${1:-}" = "--no-reboot" ] || [ -n "${MICRODUCK_FACTORY_RESET_NO_REBOOT:-}" ]; then
+		return 0
+	fi
+	systemctl reboot
+}
+
+cmd_wipe() {
+	[ -e "$MARKER" ] || { say "not armed; nothing to do"; return 0; }
+
+	# With no data partition, /var/lib/robot is the rootfs's own directory, the
+	# image's seed. Wiping it would only damage the image; there is no owner data to
+	# remove. Disarm, loudly. (Unreachable from `arm`, which refuses in that case.)
+	if [ -z "${MICRODUCK_FACTORY_RESET_DATA:-}" ] && ! data_is_mounted; then
+		say "armed, but $DATA is not the data partition; disarming without wiping" >&2
+		rm -f "$MARKER"
+		return 0
+	fi
+
+	say "factory reset: erasing owner data in $DATA"
+	walk do_remove
+
+	# Reseed what the image put on a freshly flashed data partition (the wks copies
+	# the image's /var/lib/robot): the directories later units expect to find. The
+	# rootfs copy is under the mount; a non-recursive bind of / shows it. -n, so a
+	# kept file is never overwritten by the image's.
+	if [ -z "${MICRODUCK_FACTORY_RESET_DATA:-}" ]; then
+		root=/run/microduck-factory-reset/root
+		mkdir -p "$root"
+		if mount -o bind / "$root"; then
+			cp -an "$root$DATA/." "$DATA/" || say "reseeding from the image failed; continuing" >&2
+			umount "$root"
+		else
+			say "could not see the image's $DATA; continuing without reseeding" >&2
+		fi
+	fi
+
+	# Back to the release the image seeded. Same swap as robot-rescue: a rename of
+	# the symlink, so a power cut leaves either the old or the new target.
+	if t=$(golden_target); then
+		if [ "$(readlink "$DAEMON/current" 2>/dev/null)" != "$t" ]; then
+			ln -sfn "$t" "$DAEMON/current.factory-reset"
+			mv -T "$DAEMON/current.factory-reset" "$DAEMON/current"
+			say "daemon current -> $t (golden)"
+		fi
+	else
+		say "no installed golden release; the daemon stays on $(readlink "$DAEMON/current" 2>/dev/null || echo none)" >&2
+	fi
+
+	sync
+	rm -f "$MARKER"
+	sync
+	say "factory reset done"
+}
+
+# The face button is a gpio-keys device sending KEY_ENTER (face-board-v1 DTS). An
+# input_event on aarch64 is 24 bytes: a 16-byte timeval, then u16 type, u16 code,
+# s32 value, little-endian. Read one event at a time from a descriptor held open for
+# the whole loop: reopening the device between reads would drop events.
+cmd_button() {
+	while [ ! -e "$DEVICE" ]; do
+		sleep 5
+	done
+	say "watching $DEVICE; hold ${HOLD_SECONDS}s to factory reset"
+	exec 3<"$DEVICE"
+	timer=
+	while ev=$(dd bs=24 count=1 2>/dev/null <&3 | od -An -tx1 -v); do
+		[ -n "$ev" ] || die "$DEVICE went away"
+		# shellcheck disable=SC2086
+		set -- $ev
+		[ -n "${MICRODUCK_FACTORY_RESET_DEBUG:-}" ] && say "event: $*"
+		[ $# -eq 24 ] || continue
+		# EV_KEY (1), KEY_ENTER (28 = 0x1c).
+		[ "${17}${18}${19}${20}" = "01001c00" ] || continue
+		case "${21}" in
+		01)
+			[ -n "$timer" ] && kill "$timer" 2>/dev/null
+			( sleep "$HOLD_SECONDS" && "$0" arm ) &
+			timer=$!
+			say "button down; armed in ${HOLD_SECONDS}s unless released"
+			;;
+		00)
+			if [ -n "$timer" ] && kill "$timer" 2>/dev/null; then
+				say "button released early; not resetting"
+			fi
+			timer=
+			;;
+		esac
+	done
+}
+
+case "${1:-}" in
+button) cmd_button ;;
+arm) shift; cmd_arm "$@" ;;
+wipe) cmd_wipe ;;
+plan) cmd_plan ;;
+*) die "usage: $0 button|arm [--no-reboot]|wipe|plan" ;;
+esac

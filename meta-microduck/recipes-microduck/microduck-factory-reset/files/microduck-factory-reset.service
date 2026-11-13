@@ -1,0 +1,26 @@
+[Unit]
+Description=Factory reset, when one was armed
+Documentation=file:/usr/sbin/microduck-factory-reset
+
+# Runs only when `microduck-factory-reset arm` (the face button's 10 s hold) left its
+# marker on the data partition, and before anything else opens that partition: the
+# journal's and BlueZ's bind mounts, tmpfiles, sshd's key generation, and every daemon
+# (they all come after local-fs.target). The script says what is kept and why.
+DefaultDependencies=no
+ConditionPathExists=/var/lib/robot/factory-reset
+RequiresMountsFor=/var/lib/robot /opt/robot/daemon
+After=var-lib-robot.mount systemd-remount-fs.service
+Before=local-fs.target microduck-journal-dir.service var-volatile-log-journal.mount \
+       var-lib-bluetooth.mount systemd-tmpfiles-setup.service sshdgenkeys.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/microduck-factory-reset wipe
+# A big data partition takes a while to clear; do not let the default timeout cut a
+# reset in half. The marker is removed last, so even that would only be retried.
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=local-fs.target

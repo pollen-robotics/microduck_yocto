@@ -1,0 +1,17 @@
+[Unit]
+Description=Factory reset on a 10 s hold of the face button
+Documentation=file:/usr/sbin/microduck-factory-reset
+
+# Started by 90-microduck-factory-reset.rules when the face board's gpio-keys device
+# appears, so a board without the button never runs it. Stopped with the device.
+BindsTo=dev-input-by\x2dpath-platform\x2dface\x2dkeys\x2devent.device
+After=dev-input-by\x2dpath-platform\x2dface\x2dkeys\x2devent.device
+
+[Service]
+ExecStart=/usr/sbin/microduck-factory-reset button
+Restart=on-failure
+RestartSec=2
+# Root, because arming writes to /var/lib/robot and reboots. It reads one input
+# device and runs sleep, dd and od; nothing else.
+ProtectHome=yes
+PrivateTmp=yes
