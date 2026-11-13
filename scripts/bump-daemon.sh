@@ -68,6 +68,27 @@ check_pin "NPU runtime" "$(pin rknpu runtime)" \
 check_pin "duck detector" "$(pin detector version)" \
 	"duck-$(recipe meta-microduck/recipes-microduck/microduck-detector microduck-detector)" microduck-detector
 
+# Every systemd unit the release ships must be one the recipe installs. Its
+# binaries follow cargo by a glob, its units are named one by one, so a new daemon
+# otherwise builds into an image with its binary and nothing to start it: autod in
+# 0.21.0, whose NFC tag robotd accepted and nobody acted on (2026-11-13). The
+# recipe's do_install fails on the same thing, but ~20 minutes into a build.
+tree=$(curl -fsSL "https://api.github.com/repos/pollen-robotics/microduck_daemon/git/trees/$srcrev?recursive=1")
+units=$(printf '%s' "$tree" | python3 -c 'import json, sys; print(" ".join(e["path"] for e in json.load(sys.stdin)["tree"] if "/systemd/" in e["path"] and e["path"].endswith((".service", ".timer"))))')
+[ -n "$units" ] || {
+	echo "$0: no systemd units found in daemon $version's tree" >&2
+	exit 1
+}
+missing=
+for u in $units; do
+	grep -q "/$u " meta-microduck/recipes-microduck/microduck-daemon/microduck-daemon_*.bb || missing="$missing $u"
+done
+if [ -n "$missing" ]; then
+	echo "$0: daemon $version ships units the recipe does not install:$missing" >&2
+	echo "  Add each one's install line, SYSTEMD_SERVICE entry and User= to the recipe." >&2
+	exit 1
+fi
+
 
 dir=meta-microduck/recipes-microduck/microduck-daemon
 old=$(ls "$dir"/microduck-daemon_*.bb)
