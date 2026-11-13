@@ -48,19 +48,23 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7ca
 # `version` against its own pin, and exits 0 for anything at or above it. A set from
 # another repo, or one with no record, it refuses to touch at all.
 
-# The pin is `PV`, so it is in the filename: microduck-policies_v9.bb. And it belongs to
+# The pin is `PV`, so it is in the filename: microduck-policies_v10.bb. And it belongs to
 # the daemon rather than to us -- `POLICY_VERSION` in the release's own
 # scripts/seed-policies.sh, which an xtask test holds against
 # [workspace.metadata.policies] in Cargo.toml. It was v5 from daemon 0.13.0 to 0.15.1, v7
 # from 0.15.2 to 0.16.1 (velstand steers the trunk while standing; sitstand no longer
 # tips backward), v8 from 0.16.2 to 0.18.8 (velstand gets up from a fall smoothly and
-# tracks yaw commands), and is v9 from 0.19.0, so rename this file in step with a daemon
-# bump.
+# tracks yaw commands), v9 from 0.19.0 to 0.20.1, and is v10 from 0.21.0, so rename this
+# file in step with a daemon bump.
 #
-# v9 is a rollback, not new weights: velstand.onnx and manifest.json are byte-identical
-# to v7's (the checksums below are v7's), because v8's velstand was worse on the real
-# robot. It is a new number rather than a re-tag of v7 because the seeder only ever
-# moves a board *up* -- a board already on v8 would never go back to a set called v7.
+# v10 is v9 with a new roller.onnx and nothing else: the Hub commit's only change is
+# "Upload roller.onnx with huggingface_hub", and the other ten files' checksums below are
+# v9's. What changed in the roller policy is not recorded on the Hub; not verified here.
+#
+# v9 was a rollback, not new weights: velstand.onnx and manifest.json are byte-identical
+# to v7's, because v8's velstand was worse on the real robot. It was a new number rather
+# than a re-tag of v7 because the seeder only ever moves a board *up* -- a board already
+# on v8 would never go back to a set called v7.
 #
 # Seeding *below* what the daemon names is the one thing that actively breaks: its
 # defaults name files only the newer set carries -- velstand.onnx is exactly such a file,
@@ -71,11 +75,12 @@ POLICY_REPO = "pollen-robotics/microduck-policies"
 
 # Fetched by commit, recorded as the tag. A Hub tag is a mutable ref -- it can be moved
 # onto different weights -- and "reproducible" is the reason this tree pins every layer
-# to a commit too. `.source` still says `v9`, because that is the string seed-policies.sh
+# to a commit too. `.source` still says `v10`, because that is the string seed-policies.sh
 # and `robotctl policy check` compare against.
-# The Hub's refs API lists tag v9 at 8dc9feca: that is the annotated tag object, which
-# peels to this commit (the same holds for v7, listed at f745f108 and pinned at 6677ec00).
-POLICY_REV = "283771bcb3690a0a94a288c108365d9b630d21e4"
+# The Hub's refs API lists tag v10 at this commit directly (a lightweight tag), unlike v9
+# and v7, listed at their annotated tag objects 8dc9feca and f745f108 and pinned at the
+# commits they peel to, 283771bc and 6677ec00.
+POLICY_REV = "236d1835b03ac7b45d962efbf2fe3a6940206112"
 POLICY_BASE = "https://huggingface.co/${POLICY_REPO}/resolve/${POLICY_REV}"
 
 # The whole set, not the subset robotd's defaults happen to name today.
@@ -122,7 +127,7 @@ SRC_URI[alpha_ground_pick.sha256sum] = "ffbf5109982ff999b0ba53afe86b9ae731bbec67
 SRC_URI[ball_kick_left.sha256sum] = "d6928284dccd3dd61e08bf2f760effa74309fbefd97b2b31afb2a60f526d196a"
 SRC_URI[ball_kick_right.sha256sum] = "147a32c388c6b19111b3ac3b550a9a6dc8b8bf267118af4d8c3712522eedb5af"
 SRC_URI[roulade.sha256sum] = "3d60da08fc13f29c1b57f41977aa898132c0d60042100149d8e775affcbca32b"
-SRC_URI[roller.sha256sum] = "cf05651d2708a2f9364212e86b866c97a70ace8131c492500105e8f28bf99afd"
+SRC_URI[roller.sha256sum] = "7b581097a9bc4782a695fd7654edb0c565649ad593ae439563ddf4b2b2e8a8c7"
 SRC_URI[roller_crouch.sha256sum] = "a1a084be240469c76ac9d3fa44d4792f16d4b1da60398b3ecd3cfc5e2244d990"
 
 # Weights and a JSON file. Nothing here is compiled, linked or tuned, so one build

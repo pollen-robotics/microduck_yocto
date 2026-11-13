@@ -57,7 +57,7 @@ SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ss
 # atomics' try_update in mediad, and microduck#358 brought the floor back to 1.89
 # and recorded 1.94 as the ceiling in CONTRIBUTING.md. A release that needs a
 # newer Rust than that is a CI failure here, not a reason to pin an older one.
-SRCREV_daemon = "7fba12ed048d0d3a1c306ba8a2787a1a407b9974"
+SRCREV_daemon = "d2d8eab1d90f880ab7469c8edd205e42576667bd"
 SRCREV_bmi088 = "bd113f317b14923f50f9a12a06678fe162b7fe06"
 SRCREV_FORMAT = "daemon_bmi088"
 
