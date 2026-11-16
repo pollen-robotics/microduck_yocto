@@ -7,6 +7,7 @@
 #   HFJOB_MACHINE=microduck-beta scripts/build-hfjob.sh      # the beta board
 #   HFJOB_KAS_EXTRA=kas/cve.yml HFJOB_TARGET=microduck-image scripts/build-hfjob.sh
 #                                                            # + CVE scan (kas/cve.yml)
+#   HFJOB_SAVE_SSTATE=0 scripts/build-hfjob.sh               # seed from sstate, never replace it
 #
 # The first argument is the kas command, defaulting to `build`, the same shape
 # build-local.sh uses. `checkout` is worth knowing about: it clones the layers and
@@ -47,6 +48,10 @@ TARGET=${HFJOB_TARGET:-}
 # below to find the deploy directory, which is named after it.
 MACHINE=${HFJOB_MACHINE:-microduck-zero3}
 KAS_CMD=${1:-build}
+# 0: seed from the shared sstate archive but never publish a new one. CI sets it
+# everywhere but main, so only main replaces the cache: a branch job finishing
+# last would otherwise drop what main added and fill the cache with experiments.
+SAVE_SSTATE=${HFJOB_SAVE_SSTATE:-1}
 # Extra kas files composed after hfjob.yml, colon-separated, e.g. kas/cve.yml.
 # Checked here: a typo would otherwise fail inside a job that is already billing.
 KAS_EXTRA=${HFJOB_KAS_EXTRA:-}
@@ -133,7 +138,8 @@ set -- "$@" \
 	-v "hf://buckets/$BUCKET:/cache" \
 	-e "HFJOB_BUCKET=$BUCKET" \
 	-e "KAS_CMD=$KAS_CMD" \
-	-e "KAS_MACHINE=$MACHINE"
+	-e "KAS_MACHINE=$MACHINE" \
+	-e "SAVE_SSTATE=$SAVE_SSTATE"
 
 # Appended conditionally, and each guarded: under `set -e` a bare
 # `[ -n "$x" ] && set -- ...` would exit the script whenever x is empty.
@@ -336,7 +342,9 @@ save() {
 	# them, or while another job replaced the tar, saw a mismatch and fell back
 	# to the 35-minute reseed (2026-10-06, 2026-10-15). pipefail in the command
 	# substitution, or a failing tar would hide behind sha256sum's success.
-	if [ "$seeded" = 1 ]; then
+	if [ "$SAVE_SSTATE" != 1 ]; then
+		echo "sstate: SAVE_SSTATE=$SAVE_SSTATE, not publishing"
+	elif [ "$seeded" = 1 ]; then
 		part=/cache/sstate.tar.part-"${JOB_ID:-nojobid}"
 		echo "sstate: publishing $(du -sh "$SSTATE_DIR" | cut -f1) at $(date -u +%T)"
 		if sum=$(set -o pipefail; tar -cf - -C "$SSTATE_DIR" . | tee "$part" | sha256sum | cut -d' ' -f1) \
