@@ -30,10 +30,28 @@
 # nothing away. The setting is adapter-wide, though: a device spoofing a bonded
 # gamepad's address can now re-pair as that pad without pad.pair's PIN and
 # window. That needs radio range and the pad's address; accepted as low risk.
+#
+# A classic (BR/EDR) gamepad's reports go through the kernel, not bluetoothd.
+#
+# BlueZ defaults UserspaceHID = true: bluetoothd reads every HID report off the
+# L2CAP socket and re-injects it through uhid. An LE pad (Xbox) is unaffected --
+# HID over GATT is bluetoothd's own profile either way -- but for a classic pad
+# it is the whole data path, and the Pro Controller clones stream their IMU at
+# ~200 reports/s once hid-nintendo (gamepads.cfg in meta-microduck-bsp) puts
+# them in full mode. Measured by the daemon repo on graphite, an Armbian board
+# (2026-09-09, scripts/setup-board.sh, configure_classic_hid), pad connected and
+# untouched: bluetoothd at 15.8 % CPU with true, 0.0 % with false, same reports,
+# and the bond, the reconnect after a reboot and padd driving were unchanged.
+# Armbian boards have had false since; this image never did (a face-board-v1 on
+# 20261113111055: /etc/bluetooth/input.conf untouched, the pad's nodes under
+# /sys/devices/virtual/misc/uhid/). The kernel side, BT_HIDP, is already =y.
 do_install:append:microduck() {
 	conf=${D}${sysconfdir}/bluetooth/main.conf
 	sed -i 's/^\[GATT\]$/[GATT]\nClient = false/' "$conf"
 	grep -q '^Client = false$' "$conf" || bbfatal "no [GATT] section in $conf to disable the client in"
 	sed -i 's/^#\?JustWorksRepairing = .*$/JustWorksRepairing = always/' "$conf"
 	grep -q '^JustWorksRepairing = always$' "$conf" || bbfatal "no JustWorksRepairing line in $conf to set to always"
+	input=${D}${sysconfdir}/bluetooth/input.conf
+	sed -i 's/^#\?UserspaceHID=.*$/UserspaceHID=false/' "$input"
+	grep -q '^UserspaceHID=false$' "$input" || bbfatal "no UserspaceHID line in $input to set to false"
 }
