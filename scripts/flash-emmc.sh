@@ -290,9 +290,8 @@ flash() {
 
 # The .bmap that CI publishes beside every .wic.zst lists the blocks that hold
 # data: ~0.9 GiB of the 9.1 GiB image in 2026-11 (two mostly empty 4 GiB slots
-# and a 1 GiB data partition). Writing only those should take ~1 min instead of
-# ~9 (the full write's ~17 MB/s applied to 0.9 GiB, plus one rkdeveloptool start
-# per range; not yet timed on a board when this was written, 2026-11-17);
+# and a 1 GiB data partition). Writing only those takes ~1 min instead of ~9
+# (1 min 2 s for v1.4.2's 54 ranges on a face-board-v1, 2026-11-17);
 # `rkdeveloptool wl` has no notion of holes, so each mapped range is cut out of
 # the .wic and written at its own sector. What is not written keeps whatever the
 # eMMC held before: free ext4 blocks, the unallocated 20..48 MiB, and v_storage
@@ -300,7 +299,10 @@ flash() {
 # one SD cards are already flashed with. Everything ext4 reads before writing is
 # mapped, the journals included (checked on v1.4.2: 64 MiB per slot, 32 MiB in
 # data, each one whole range), as is uboot_env (the wks gives it an entry for
-# that reason, #24). FLASH_EMMC_FULL=1 writes the whole image instead.
+# that reason, #24). Tested on 2026-11-17 over a board fully written with
+# v1.1.0's older layout, so the skipped blocks held stale ext4 data: it booted,
+# robotctl health said healthy, and e2fsck -fn on rootfs_b was clean.
+# FLASH_EMMC_FULL=1 writes the whole image instead.
 
 # bmap_ranges BMAP: one "first last sha256" line per mapped range, in blocks.
 bmap_ranges() {
