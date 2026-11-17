@@ -18,7 +18,9 @@
 #   scripts/flash-emmc.sh dev microduck-beta       latest dev build on a beta board
 #
 # flash and recover show what they are about to write and ask first;
-# FLASH_EMMC_YES=1 skips the question. Files are downloaded once, into
+# FLASH_EMMC_YES=1 skips the question. flash writes only the blocks the
+# image's .bmap lists (about a minute); FLASH_EMMC_FULL=1 writes all 9.1 GiB
+# (about 9 minutes). Files are downloaded once, into
 # $FLASH_DIR/<tag or folder>, by default the user cache dir:
 # $XDG_CACHE_HOME/microduck-flash, i.e. ~/.cache/microduck-flash. A release's
 # image is kept decompressed there, so the next robot is just another run; a
@@ -43,7 +45,7 @@ FLASH_DIR=${FLASH_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/microduck-flash}
 die() { echo "error: $*" >&2; exit 1; }
 say() { echo "==> $*" >&2; }
 
-usage() { sed -n '2,36s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,38s/^# \{0,1\}//p' "$0"; }
 
 # rkdeveloptool needs root on Linux (no udev rule), not on macOS.
 rkdt() {
@@ -239,7 +241,7 @@ to_loader() {
 }
 
 flash() {
-	local img zst wic
+	local img zst wic bmap
 	check_machine
 	resolve "$1"
 	img=$(src_files | grep -E "^$IMG\.rootfs-[0-9]+\.wic\.zst\$" | head -1) ||
@@ -262,11 +264,90 @@ flash() {
 	fi
 	check_ddr "$wic"
 
+	bmap=$wic.bmap
+	if [ -n "${FLASH_EMMC_FULL:-}" ]; then
+		bmap=
+	elif src_files | grep -qxF "$(basename "$bmap")"; then
+		get "$(basename "$bmap")" "$bmap"
+	else
+		say "no .bmap in $SRC: writing the whole image"
+		bmap=
+	fi
+	[ -z "$bmap" ] || check_bmap "$wic" "$bmap"
+
 	to_loader "$DIR/$MACHINE-loader.bin"
-	say "writing $(basename "$wic"): several minutes"
-	rkdt wl 0 "$wic"
-	[ "$KIND" = release ] || rm -f "$wic"
+	SECONDS=0
+	if [ -n "$bmap" ]; then
+		write_bmap "$wic" "$bmap"
+	else
+		say "writing $(basename "$wic") whole: about 9 minutes"
+		rkdt wl 0 "$wic"
+	fi
+	say "written in $((SECONDS / 60)) min $((SECONDS % 60)) s"
+	[ "$KIND" = release ] || rm -f "$wic" "$bmap"
 	say "done. Switch the power off, then on. Do not use 'rkdeveloptool rd' (warm resets hang)."
+}
+
+# The .bmap that CI publishes beside every .wic.zst lists the blocks that hold
+# data: ~0.9 GiB of the 9.1 GiB image in 2026-11 (two mostly empty 4 GiB slots
+# and a 1 GiB data partition). Writing only those should take ~1 min instead of
+# ~9 (the full write's ~17 MB/s applied to 0.9 GiB, plus one rkdeveloptool start
+# per range; not yet timed on a board when this was written, 2026-11-17);
+# `rkdeveloptool wl` has no notion of holes, so each mapped range is cut out of
+# the .wic and written at its own sector. What is not written keeps whatever the
+# eMMC held before: free ext4 blocks, the unallocated 20..48 MiB, and v_storage
+# (MAC, serial), which is better kept anyway. That is bmaptool's contract, the
+# one SD cards are already flashed with. Everything ext4 reads before writing is
+# mapped, the journals included (checked on v1.4.2: 64 MiB per slot, 32 MiB in
+# data, each one whole range), as is uboot_env (the wks gives it an entry for
+# that reason, #24). FLASH_EMMC_FULL=1 writes the whole image instead.
+
+# bmap_ranges BMAP: one "first last sha256" line per mapped range, in blocks.
+bmap_ranges() {
+	sed -nE 's|.*<Range chksum="([0-9a-f]{64})"> *([0-9]+)(-([0-9]+))? *</Range>.*|\2 \4 \1|p' "$1" |
+		awk 'NF == 2 { print $1, $1, $2; next } { print $1, $2, $3 }'
+}
+
+bmap_field() {
+	sed -nE "s|.*<$2> *([0-9a-z]+) *</$2>.*|\1|p" "$1" | head -1
+}
+
+# check_bmap WIC BMAP: the .bmap describes this .wic, before anything is written.
+# Each range's checksum is checked again as it is cut out, in write_bmap.
+check_bmap() {
+	local wic=$1 bmap=$2 bs mapped n
+	bs=$(bmap_field "$bmap" BlockSize)
+	[ "$(bmap_field "$bmap" ChecksumType)" = sha256 ] || die "$bmap: not a sha256 bmap"
+	[ -n "$bs" ] && [ $((bs % 512)) -eq 0 ] || die "$bmap: bad BlockSize '$bs'"
+	[ "$(bmap_field "$bmap" ImageSize)" = "$(size "$wic")" ] ||
+		die "$(basename "$wic") is not the size its .bmap says; delete both and re-run"
+	mapped=$(bmap_ranges "$bmap" | awk '{ n += $2 - $1 + 1 } END { print n + 0 }')
+	n=$(bmap_ranges "$bmap" | wc -l | tr -d ' ')
+	[ "$mapped" = "$(bmap_field "$bmap" MappedBlocksCount)" ] && [ "$n" -gt 0 ] ||
+		die "$bmap: its ranges do not add up to MappedBlocksCount"
+	BMAP_BS=$bs BMAP_N=$n BMAP_MIB=$((mapped * bs / 1048576))
+}
+
+# write_bmap WIC BMAP: writes each mapped range of WIC at its own sector.
+write_bmap() {
+	local wic=$1 bmap=$2 piece=$1.piece first last sum i=0 magic
+	say "writing the $BMAP_MIB MiB of $(basename "$wic") that hold data, in $BMAP_N pieces: about a minute"
+	while read -r first last sum; do
+		i=$((i + 1))
+		dd if="$wic" of="$piece" bs="$BMAP_BS" skip="$first" count=$((last - first + 1)) 2>/dev/null
+		[ "$(sha256 <"$piece")" = "$sum" ] ||
+			die "blocks $first-$last of $(basename "$wic") do not match its .bmap; delete both and re-run"
+		# wl treats a file starting with a sparse or UBI magic specially, and for
+		# UBI erases from that sector to the end of the eMMC (rkdeveloptool
+		# main.cpp, "WL"). Neither can start a range of this image; refuse anyway.
+		magic=$(head -c 4 "$piece" | od -An -tx1 | tr -d ' \n')
+		case $magic in 3aff26ed | 55424923) die "blocks $first-$last start with a sparse or UBI magic: use FLASH_EMMC_FULL=1" ;; esac
+		printf '\r==> piece %d/%d' "$i" "$BMAP_N" >&2
+		rkdt wl $((first * BMAP_BS / 512)) "$piece" >/dev/null ||
+			{ echo >&2; rm -f "$piece"; die "writing blocks $first-$last failed: the eMMC is half written, run flash again"; }
+	done < <(bmap_ranges "$bmap")
+	echo >&2
+	rm -f "$piece"
 }
 
 # Where the .wks puts things, in 512-byte sectors (microduck-ab.wks.in).

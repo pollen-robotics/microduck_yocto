@@ -106,8 +106,9 @@ face LEDs will not work.
    ```
    It prints the eMMC's information, including its size. If it fails, see
    "Troubleshooting".
-5. **Write the image.** This takes several minutes: the whole 9.1 GiB goes over
-   USB 2, empty space included.
+5. **Write the image.** This takes about 9 minutes: the whole 9.1 GiB goes over
+   USB 2, empty space included. The script writes only the ~0.9 GiB that holds
+   data, in about a minute (see [With the script](#with-the-script)).
    ```sh
    sudo rkdeveloptool wl 0 microduck-image-microduck-face-board-v1.rootfs-*.wic
    ```
@@ -141,6 +142,14 @@ The procedure is the same. What differs:
 it downloads the release once, checks the checksum and the loader's DRAM
 init, decompresses the image, waits for the robot, runs `db` if it is in
 Maskrom, then `rfi` and `wl`.
+
+It is also faster than the manual steps: about a minute instead of 9. Most of
+the 9.1 GiB image is empty (two 4 GiB system slots holding ~0.4 GiB each), and
+the `.wic.bmap` published beside every image lists the parts that hold data.
+The script checks each of those parts against the `.bmap`'s checksums and
+writes only them, with one `wl` per part. The empty parts keep whatever the
+eMMC held before, which the robot never reads: this is what `bmaptool` does
+for SD cards. `FLASH_EMMC_FULL=1` writes the whole image the slow way.
 
 ```sh
 scripts/flash-emmc.sh microduck-os-v1.0.1
@@ -195,5 +204,5 @@ About 30 seconds after power-on:
 | `ld` lists nothing | Charge-only cable, robot not powered (USB-C alone is not enough), or the button was released too early. Try again from step 2. |
 | `ld` lists nothing and the Recovery button does nothing | Short test point **TP64 (eMMC_D0) to TP4 (GND)** while powering on: this forces Maskrom. |
 | `db` succeeds but `rfi` fails | The DRAM did not start. Power-cycle and retry once; if it persists, set the board aside: [`agents/beta-board.md`](agents/beta-board.md), "A board stuck in maskrom", has the recovery. |
-| `wl` stops part way | Cable or USB port. Start again from step 2; the write can be repeated as often as needed. |
+| `wl` stops part way, or the script says "writing blocks ... failed" | Cable or USB port. Start again from step 2; the write can be repeated as often as needed. |
 | LED off, fan at full speed after flashing | Boot hang. Power-cycle (power off, then on). |
