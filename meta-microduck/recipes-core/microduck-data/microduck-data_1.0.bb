@@ -18,7 +18,8 @@ SRC_URI = " \
     file://microduck-data-grow.service \
 "
 
-inherit systemd
+inherit systemd features_check
+REQUIRED_DISTRO_FEATURES = "systemd"
 
 # The unit name must be the mount point with / -> -.
 # microduck-journal-dir.service is not listed: the journal mount pulls it in.
