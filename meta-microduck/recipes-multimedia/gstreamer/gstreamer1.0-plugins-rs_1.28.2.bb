@@ -28,7 +28,7 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 #
 # There are five such repositories, not one. The first attempt fetched only
 # gstreamer-rs and still failed, on `glib` from gtk-rs-core, because **cargo
-# resolves the entire workspace even when --package names two members**: the error
+# resolves the entire workspace even when --package names only some members**: the error
 # came from gst-plugin-analytics, which we do not build. Resolution needs every
 # member's sources present; compilation still only touches what we ask for, so
 # gtk4-rs and the rest are fetched and never built.
@@ -113,6 +113,7 @@ CARGO_BUILD_FLAGS += "--package gst-plugin-webrtc --package gst-plugin-rtp --pac
 python microduck_cargo_git_patch_paths() {
     import os
     import re
+    import tomllib
 
     unpackdir = d.getVar("UNPACKDIR")
     config = os.path.join(d.getVar("CARGO_HOME"), "config.toml")
@@ -125,18 +126,10 @@ python microduck_cargo_git_patch_paths() {
     # crate name -> repository URL, for every package resolved from git.
     # The URL is the [patch] key and has to match what the dependency declares, so
     # take it verbatim from the lockfile minus the ?branch/?rev query and #commit.
-    wanted = {}
-    name = None
-    with open(source) as f:
-        for line in f:
-            line = line.strip()
-            match = re.match(r'name = "([^"]+)"', line)
-            if match:
-                name = match.group(1)
-                continue
-            match = re.match(r'source = "git\+([^?#"]+)', line)
-            if match and name:
-                wanted[name] = match.group(1)
+    with open(source, "rb") as f:
+        packages = tomllib.load(f)["package"]
+    wanted = {p["name"]: re.split(r"[?#]", p["source"].removeprefix("git+"))[0]
+              for p in packages if p.get("source", "").startswith("git+")}
 
     if not wanted:
         bb.fatal("no git-sourced packages in %s. If upstream moved these crates to "
@@ -147,15 +140,14 @@ python microduck_cargo_git_patch_paths() {
     # Each repository is unpacked at ${UNPACKDIR}/<basename minus .git>, which is the
     # destsuffix convention used in SRC_URI above.
     def checkout(url):
-        return os.path.join(unpackdir, os.path.basename(url)[:-4]
-                            if url.endswith(".git") else os.path.basename(url))
+        return os.path.join(unpackdir, os.path.basename(url).removesuffix(".git"))
 
     repos = sorted(set(wanted.values()))
     absent = [r for r in repos if not os.path.isdir(checkout(r))]
     if absent:
         bb.fatal("the lockfile resolves crates from %d git repositories and these are "
                  "not in SRC_URI: %s. Cargo resolves the whole workspace even though "
-                 "CARGO_BUILD_FLAGS names two members, so every one of them has to be "
+                 "CARGO_BUILD_FLAGS names only some members, so every one of them has to be "
                  "fetched." % (len(repos), " ".join(absent)))
 
     # Where each crate actually lives. Walk rather than assume: the -sys crates sit
@@ -167,18 +159,11 @@ python microduck_cargo_git_patch_paths() {
             dirnames[:] = [x for x in dirnames if x not in (".git", "target")]
             if "Cargo.toml" not in filenames:
                 continue
-            package, section = None, None
-            with open(os.path.join(dirpath, "Cargo.toml")) as f:
-                for line in f:
-                    stripped = line.strip()
-                    if stripped.startswith("["):
-                        section = stripped
-                        continue
-                    if section == "[package]":
-                        match = re.match(r'name\s*=\s*"([^"]+)"', stripped)
-                        if match:
-                            package = match.group(1)
-                            break
+            with open(os.path.join(dirpath, "Cargo.toml"), "rb") as f:
+                try:
+                    package = tomllib.load(f).get("package", {}).get("name")
+                except tomllib.TOMLDecodeError as e:
+                    bb.fatal("%s/Cargo.toml: %s" % (dirpath, e))
             if package:
                 found[(repo, package)] = dirpath
 
