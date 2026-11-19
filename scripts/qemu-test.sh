@@ -108,9 +108,8 @@ say 'ls /dev/mpp_service /dev/rga 2>&1'
 GST_PLUGINS="app coreelements debugutilsbad dtls nice rockchipmpp rsrtp rswebrtc rtp rtpmanager sctp srtp video4linux2 videoconvertscale videofilter videoparsersbad videorate videotestsrc webrtc"
 say "for p in $GST_PLUGINS; do gst-inspect-1.0 \$p >/dev/null 2>&1 || echo GST-MISSING \$p; done; echo GST-CHECKED" 20
 
-# ONNX Runtime: ort dlopens the unversioned name, so that symlink must exist in the
-# runtime package. robotd works without it and only fails to walk.
-say 'ls -l /usr/lib/libonnxruntime.so*'
+# ONNX Runtime: what the daemon dlopens, and the version file its hook reads.
+say 'ls -l /usr/lib/libonnxruntime.so* /usr/lib/libonnxruntime.version'
 say 'echo MARK-END'
 say poweroff 10
 
