@@ -8,7 +8,8 @@ SRC_URI = "file://70-microduck-nfc-spidev.rules"
 
 S = "${UNPACKDIR}"
 
-inherit allarch
+# The rule names an RK3566 SPI controller by address: machine-specific.
+PACKAGE_ARCH = "${MACHINE_ARCH}"
 
 do_install() {
 	install -d ${D}${nonarch_base_libdir}/udev/rules.d
