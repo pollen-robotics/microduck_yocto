@@ -82,7 +82,6 @@ do_install() {
 SYSTEMD_SERVICE:${PN} = "rkaiq_3A.service"
 
 # librkaiq.so is unversioned (its SONAME is librkaiq.so), so it ships in the main
-# package, not -dev.
+# package, not -dev. A real file (readlink -f), so dev-so does not fire.
 FILES:${PN} += "${libdir}/librkaiq.so ${systemd_system_unitdir}/mediad.service.d"
 FILES_SOLIBSDEV = ""
-INSANE_SKIP:${PN} += "dev-so"
