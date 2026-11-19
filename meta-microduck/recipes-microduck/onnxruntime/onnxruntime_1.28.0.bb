@@ -27,8 +27,9 @@ S = "${UNPACKDIR}/onnxruntime-linux-aarch64-${PV}"
 # An aarch64 binary drop.
 COMPATIBLE_HOST = "aarch64.*-linux"
 
-do_configure[noexec] = "1"
-do_compile[noexec] = "1"
+# Prebuilt: no configure/compile. Our do_install replaces the class's, which
+# copies ${S} as-is and this archive is not laid out like a rootfs.
+inherit bin_package
 
 # No `cp -a` anywhere below, deliberately. Microsoft's tarball is owned by their
 # build user (uid 1004), and -a preserves that, which fails do_package with:
