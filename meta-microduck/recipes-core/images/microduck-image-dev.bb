@@ -100,7 +100,7 @@ IMAGE_INSTALL:append = " \
 # the shipping image for the same reason as everything else on this list: nobody types
 # commands on a shipping robot, so nothing there should pay for a Tab key. It pulls in
 # bash-completion, which is the piece that was actually missing -- bash itself is
-# already in both images. The daemon recipe's package block has the chain.
+# already in both images. docs/agents/daemon-recipe.md has the chain.
 #
 # MICRODUCK_RADIO_DEV_PACKAGES is aic8800-bt-test on the Zero 3W: AICSemi's own
 # bt_test, which talks to the chip directly, so it tells a hardware fault from a
