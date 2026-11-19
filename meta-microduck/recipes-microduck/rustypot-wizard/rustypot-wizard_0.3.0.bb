@@ -20,8 +20,9 @@ S = "${UNPACKDIR}/rustypot_wizard-aarch64-unknown-linux-gnu"
 
 COMPATIBLE_HOST = "aarch64.*-linux"
 
-do_configure[noexec] = "1"
-do_compile[noexec] = "1"
+# Prebuilt: no configure/compile. Our do_install replaces the class's, which
+# copies ${S} as-is and this archive is not laid out like a rootfs.
+inherit bin_package
 
 do_install() {
 	install -d ${D}${bindir}

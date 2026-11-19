@@ -38,7 +38,8 @@ one-line pointers; the reasons live here.
 ## Build
 
 - `cmake-native`: rustls uses aws-lc-rs, whose `aws-lc-sys` runs CMake. No
-  OpenSSL in the Rust build.
+  OpenSSL in the Rust build. CMake is a tool for that one crate, so not
+  `inherit cmake`: that class would run CMake on our cargo workspace.
 - `systemd` + `inherit pkgconfig`: padd's gilrs needs libudev-sys
   unconditionally. `systemd` gives the library, `pkgconfig` the binary its
   build.rs runs. Without the latter the env looks right and the build dies with
