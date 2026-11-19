@@ -109,6 +109,9 @@ Topics too long for this file, each a list of things that bite:
 - `docs/agents/zero3-board.md` — the Zero 3W stand-in: which wifi module it
   has, its U-Boot, the AIC8800's Bluetooth (`hciattach`, rfkill twice) and the
   gamepad-pairing workaround.
+- `docs/agents/daemon-recipe.md` — why each line of `microduck-daemon_*.bb`
+  is there: the pin, the bmi088 git dep, users and groups, the release tree,
+  the package splits, every runtime dependency. The recipe keeps only pointers.
 - `docs/agents/gst-tracers.md` — measuring the media pipeline (dev image): why
   `mediad` needs `RUST_LOG=gst=debug` and a WebRTC consumer before tracers say
   anything, why the CSV tracers never write from inside it, and the measured

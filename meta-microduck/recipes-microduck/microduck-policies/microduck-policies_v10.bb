@@ -39,7 +39,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7ca
 # image installs through neither, so nothing ever ran it here. Re-running it at first
 # boot would not fix this either: it needs curl, which this image did not carry (see
 # recipes-microduck/onnxruntime for the other half of that discovery, and
-# microduck-daemon for where curl now comes from), and it needs the network to be up
+# docs/agents/daemon-recipe.md for where curl now comes from), and it needs the network to be up
 # before the first update check -- on a robot provisioned over BLE because it has no
 # wifi yet, that is a robot that cannot walk out of the box.
 #
