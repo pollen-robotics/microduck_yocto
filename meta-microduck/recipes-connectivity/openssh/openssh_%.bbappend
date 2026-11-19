@@ -10,12 +10,12 @@
 # A robot moving to an image with this generates its key once more, on the data
 # partition, then keeps it: the keys of the slot it came from live in that slot's
 # rootfs, which is not mounted, so there is nothing to carry over.
-OPENSSH_HOST_KEY_DIR = "${localstatedir}/lib/robot/ssh"
+OPENSSH_HOST_KEY_DIR:microduck = "${localstatedir}/lib/robot/ssh"
 
-FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
-SRC_URI += "file://sshdgenkeys-data.conf"
+FILESEXTRAPATHS:prepend:microduck := "${THISDIR}/files:"
+SRC_URI:append:microduck = " file://sshdgenkeys-data.conf"
 
-do_install:append() {
+do_install:append:microduck() {
 	install -d ${D}${systemd_system_unitdir}/sshdgenkeys.service.d
 	install -m 0644 ${UNPACKDIR}/sshdgenkeys-data.conf \
 		${D}${systemd_system_unitdir}/sshdgenkeys.service.d/microduck-data.conf
