@@ -8,7 +8,8 @@ LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384
 
 SRC_URI = "file://microduck-cpu-voltage"
 
-inherit allarch
+inherit allarch features_check
+REQUIRED_DISTRO_FEATURES = "systemd"
 
 S = "${UNPACKDIR}"
 

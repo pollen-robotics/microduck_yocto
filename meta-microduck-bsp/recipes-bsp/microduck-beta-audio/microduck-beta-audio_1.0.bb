@@ -16,7 +16,8 @@ S = "${UNPACKDIR}"
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 COMPATIBLE_MACHINE = "microduck-beta"
 
-inherit systemd
+inherit systemd features_check
+REQUIRED_DISTRO_FEATURES = "systemd"
 
 SYSTEMD_SERVICE:${PN} = "microduck-audio-path.service"
 SYSTEMD_AUTO_ENABLE = "enable"

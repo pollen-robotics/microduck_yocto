@@ -7,7 +7,8 @@ Bluetooth controller on UART1. Firmware is wq9201s-firmware."
 LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://debian/copyright;md5=3727876b7206ead678f0a134cddb542b"
 
-inherit module systemd
+inherit module systemd features_check
+REQUIRED_DISTRO_FEATURES = "wifi"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
