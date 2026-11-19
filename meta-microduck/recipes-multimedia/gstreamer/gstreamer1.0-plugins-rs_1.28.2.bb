@@ -28,7 +28,7 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 #
 # There are five such repositories, not one. The first attempt fetched only
 # gstreamer-rs and still failed, on `glib` from gtk-rs-core, because **cargo
-# resolves the entire workspace even when --package names two members**: the error
+# resolves the entire workspace even when --package names only some members**: the error
 # came from gst-plugin-analytics, which we do not build. Resolution needs every
 # member's sources present; compilation still only touches what we ask for, so
 # gtk4-rs and the rest are fetched and never built.
@@ -155,7 +155,7 @@ python microduck_cargo_git_patch_paths() {
     if absent:
         bb.fatal("the lockfile resolves crates from %d git repositories and these are "
                  "not in SRC_URI: %s. Cargo resolves the whole workspace even though "
-                 "CARGO_BUILD_FLAGS names two members, so every one of them has to be "
+                 "CARGO_BUILD_FLAGS names only some members, so every one of them has to be "
                  "fetched." % (len(repos), " ".join(absent)))
 
     # Where each crate actually lives. Walk rather than assume: the -sys crates sit
