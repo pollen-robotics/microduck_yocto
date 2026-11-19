@@ -70,9 +70,15 @@ FILES:${PN} = " \
 "
 FILES:${PN}-dev = "${includedir} ${libdir}/pkgconfig ${libdir}/cmake"
 
-# already-stripped: Microsoft ships it stripped.
-# dev-so: the deliberate unversioned-symlink placement above.
-INSANE_SKIP:${PN} += "already-stripped dev-so"
+# Shipped stripped.
+INHIBIT_PACKAGE_STRIP_FILES = " \
+    ${PKGD}${libdir}/libonnxruntime.so.${PV} \
+    ${PKGD}${libdir}/libonnxruntime_providers_shared.so \
+"
+# dev-so: the deliberate unversioned-symlink placement above. It cannot be scoped to
+# one file; it goes when robotd dlopens libonnxruntime.so.1 and the daemon's hook
+# stops reading the version from the /usr/local/lib link.
+INSANE_SKIP:${PN} += "dev-so"
 
 # Prebuilt, so nothing here is rebuilt against our toolchain. It needs at most
 # GLIBC_2.27 (checked with `strings | grep GLIBC_`), well below wrynose's glibc, so

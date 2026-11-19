@@ -41,10 +41,12 @@ do_install() {
 
 # The unversioned name is the only one Rockchip ships (it is also the library's
 # SONAME), and it is what duck-detect dlopens -- it belongs in the runtime package,
-# not -dev. Hence FILES and the dev-so skip, as for onnxruntime.
+# not -dev. A real file, not a symlink, so dev-so does not fire.
 FILES:${PN} = "${libdir}/librknnrt.so ${libdir}/librknnrt.version"
 FILES_SOLIBSDEV = ""
 
-# already-stripped: Rockchip ships it stripped. ldflags: not linked by our toolchain.
+# Shipped stripped.
 # Needs at most GLIBC_2.17 / GLIBCXX_3.4.22 (`grep -ao` over the .so), far below wrynose's.
-INSANE_SKIP:${PN} += "already-stripped ldflags dev-so"
+INHIBIT_PACKAGE_STRIP_FILES = "${PKGD}${libdir}/librknnrt.so"
+# ldflags: Rockchip's .so has no GNU_HASH; only a Rockchip rebuild can fix it.
+INSANE_SKIP:${PN} += "ldflags"
