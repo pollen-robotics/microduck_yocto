@@ -130,6 +130,9 @@ jobs:
           # The matrix above picks the board: the beta boards on a push or a release.
           HFJOB_MACHINE: ${{ matrix.machine }}
           HFJOB_FLAVOR: ${{ inputs.flavor || 'cpu-performance' }}
+          # Only main replaces the shared sstate archive; branches and release
+          # tags read it. build-hfjob.sh, SAVE_SSTATE.
+          HFJOB_SAVE_SSTATE: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
           RAUC_DEV_KEY: ${{ secrets.RAUC_DEV_KEY }}
           RAUC_DEV_CERT: ${{ secrets.RAUC_DEV_CERT }}
         run: |
