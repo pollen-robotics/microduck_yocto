@@ -14,7 +14,8 @@ SRC_URI = " \
 "
 S = "${UNPACKDIR}"
 
-inherit allarch systemd
+inherit allarch systemd features_check
+REQUIRED_DISTRO_FEATURES = "systemd"
 
 # Only the path unit is enabled; it starts the service, which has no [Install].
 SYSTEMD_SERVICE:${PN} = "microduck-ssh-wifi.path"
