@@ -34,8 +34,9 @@ S = "${UNPACKDIR}"
 # An aarch64 binary drop.
 COMPATIBLE_HOST = "aarch64.*-linux"
 
-do_configure[noexec] = "1"
-do_compile[noexec] = "1"
+# Prebuilt: no configure/compile. Our do_install replaces the class's, which
+# copies ${S} as-is and ${S} also holds the LICENSE.
+inherit bin_package
 
 do_install() {
 	install -d ${D}${libdir}
