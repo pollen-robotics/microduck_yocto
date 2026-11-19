@@ -32,7 +32,7 @@ SRCREV_FORMAT = "daemon_bmi088"
 
 require microduck-daemon-crates.inc
 
-# aws-lc-sys runs CMake.
+# aws-lc-sys runs CMake. A DEPENDS, not `inherit cmake`.
 DEPENDS += "cmake-native"
 # libudev for padd's gilrs (inherit pkgconfig supplies the binary).
 DEPENDS += "systemd"
