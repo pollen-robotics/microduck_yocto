@@ -64,6 +64,18 @@ SRC_URI += " \
     file://0014-ipv6-mcast-extend-RCU-protection-in-igmp6-send.patch \
 "
 
+# Bluetooth: a bonded BR/EDR device that opens L2CAP the moment encryption
+# comes on was refused with "security block" and dropped (Authentication
+# Failure), because the key size was still being read from the controller.
+# 6.1.172 has the check (522e9ed157e3) without its fix; no 6.1 stable release
+# carries the fix as of 6.1.192, so this is a hand backport of mainline
+# c82b6357a546. Measured on the face board V1 with a Switch Pro Controller,
+# 2026-11-12: the request came 1.5 ms after Encryption Change, the key size
+# 1.6 ms after that (HCI over a 1.5 Mbaud UART).
+SRC_URI += " \
+    file://0015-Bluetooth-hci_event-Fix-not-using-key-encryption-size.patch \
+"
+
 # Reproducible boot.img: microduck-bundle refuses a bundle whose boot.img differs from the card's.
 #   no-mali400.cfg    the Mali-400 driver baked `date` into the Image
 # (resource_tool used to write stack garbage into resource.img and needed a patch;
