@@ -15,7 +15,8 @@ SRC_URI = " \
 
 S = "${UNPACKDIR}"
 
-inherit systemd allarch
+inherit systemd allarch features_check
+REQUIRED_DISTRO_FEATURES = "systemd"
 
 SYSTEMD_SERVICE:${PN} = "microduck-usb-gadget.service microduck-usb-dhcp.service"
 SYSTEMD_AUTO_ENABLE = "enable"
