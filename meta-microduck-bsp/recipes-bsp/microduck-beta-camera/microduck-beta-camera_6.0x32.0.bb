@@ -9,6 +9,12 @@ HOMEPAGE = "https://github.com/Seeed-Studio/seeed_armbian_extension"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://NOTICE;md5=9645f39e9db895a4aa6e02cb57294595"
 
+# librkaiq.so links libdrm.so.2. Without libdrm in DEPENDS the shlib scan has no
+# provider for it and package_qa fails (file-rdeps); with it the runtime
+# dependency is added automatically. m4, xxd and coreutils' tac (header_strip.sh;
+# not among bitbake's HOSTTOOLS) generate the IQ parser's headers at build time.
+DEPENDS += "libdrm m4-native xxd-native coreutils-native"
+
 # rkaiq v6.0x32.0 from source, as Seeed publishes it: camera_engine_rkaiq on the
 # deb_source branch of their public seeed_armbian_extension, with this module's
 # IQ file in rkaiq/iqfiles/isp21. Not meta-rockchip's rockchip-rkaiq: the IQ
@@ -27,12 +33,6 @@ COMPATIBLE_MACHINE = "microduck-beta"
 
 inherit cmake pkgconfig systemd features_check
 REQUIRED_DISTRO_FEATURES = "systemd"
-
-# librkaiq.so links libdrm.so.2. Without libdrm in DEPENDS the shlib scan has no
-# provider for it and package_qa fails (file-rdeps); with it the runtime
-# dependency is added automatically. m4, xxd and coreutils' tac (header_strip.sh;
-# not among bitbake's HOSTTOOLS) generate the IQ parser's headers at build time.
-DEPENDS += "libdrm m4-native xxd-native coreutils-native"
 
 # Seeed's build-deb.sh for rk356x (ISP v21), flag for flag.
 EXTRA_OECMAKE = " \
