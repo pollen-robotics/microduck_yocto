@@ -219,10 +219,10 @@ docs/flashing.md         flashing a robot's eMMC, for the factory
 docs/agents/             deep notes, each a list of things that bite
 ```
 
-The upstream layers are `openembedded-core`, `bitbake`, `meta-yocto`,
-`meta-openembedded`, `meta-rockchip` and `meta-rauc`, all on Yocto 6.0
-**wrynose** (LTS to April 2030). There is no `poky` repo: it has no wrynose
-branch, so the three repos it combines are checked out separately.
+The upstream layers are `openembedded-core`, `bitbake`, `meta-openembedded`,
+`meta-rockchip` and `meta-rauc`, all on Yocto 6.0 **wrynose** (LTS to April
+2030). There is no `poky`: the `microduck` distro is its own, on oe-core's
+defaults.
 
 The partition layout is `meta-microduck-bsp/files/wic/microduck-ab.wks.in`. Its
 first 16 MiB follow Rockchip's documented table, because vendor code writes to

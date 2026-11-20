@@ -13,7 +13,8 @@ a branch that doesn't exist, a recipe named differently, a variable set somewher
 you didn't look. This repo already has a scar for each:
 
 - `poky` has **no `wrynose` branch** (it stops at `walnascar`), which is why we
-  use `openembedded-core` + `meta-yocto` + `bitbake` separately.
+  use `openembedded-core` + `bitbake` separately. The distro does not use poky's
+  conf either (no meta-yocto): `microduck.conf` stands on oe-core's defaults.
 - meta-rockchip sets neither `RK_UBOOT_SPL` nor `RK_UBOOT_CFG` in any machine
   conf, so its only tested U-Boot path is the Rockchip Miniloader with generic
   `rk3568_defconfig` — not what radxa's defconfig expects.
