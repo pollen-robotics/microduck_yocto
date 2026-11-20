@@ -7,6 +7,9 @@ require recipes-core/images/core-image-base.bb
 
 inherit rockchip-image extrausers
 
+# Overrides rockchip-image.bbclass's ?= single-rootfs layout.
+WKS_FILE = "microduck-ab.wks.in"
+
 # The operator account the daemon's tooling logs in as (duckctl ssh, dev-push.sh).
 # A shared password is acceptable only because ssh is on the head's USB-C link
 # alone. Fixed salt for reproducibility: `openssl passwd -6 -salt microduckbeta microduck`.
