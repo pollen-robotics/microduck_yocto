@@ -17,6 +17,13 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=86d3f3a95c324c9479bd8986968f4327"
 inherit cargo cargo-update-recipe-crates pkgconfig systemd useradd features_check
 REQUIRED_DISTRO_FEATURES = "systemd bluetooth wifi"
 
+# aws-lc-sys runs CMake. A DEPENDS, not `inherit cmake`.
+DEPENDS += "cmake-native"
+# libudev for padd's gilrs (inherit pkgconfig supplies the binary).
+DEPENDS += "systemd"
+# mediad's gstreamer -sys crates; webrtc comes from our plugins-bad bbappend.
+DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-bad"
+
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ssh;branch=main;name=daemon \
@@ -32,13 +39,6 @@ SRCREV_bmi088 = "bd113f317b14923f50f9a12a06678fe162b7fe06"
 SRCREV_FORMAT = "daemon_bmi088"
 
 require microduck-daemon-crates.inc
-
-# aws-lc-sys runs CMake. A DEPENDS, not `inherit cmake`.
-DEPENDS += "cmake-native"
-# libudev for padd's gilrs (inherit pkgconfig supplies the binary).
-DEPENDS += "systemd"
-# mediad's gstreamer -sys crates; webrtc comes from our plugins-bad bbappend.
-DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-bad"
 
 CARGO_BUILD_FLAGS += "--workspace --exclude xtask --exclude test-support --exclude duckctl --exclude duck-ether"
 
@@ -159,9 +159,12 @@ do_install:append() {
 
 CONFFILES:${PN} = "${sysconfdir}/robot/robotd.toml ${sysconfdir}/robot/updater.toml"
 
-PACKAGES =+ "${PN}-padd"
-FILES:${PN}-padd = "/opt/robot/daemon/releases/${PV}/bin/padd ${systemd_system_unitdir}/padd.service"
+PACKAGES =+ "${PN}-devkey ${PN}-bash-completion ${PN}-padd"
 
+FILES:${PN}-padd = "/opt/robot/daemon/releases/${PV}/bin/padd ${systemd_system_unitdir}/padd.service"
+FILES:${PN}-bash-completion = "${datadir}/bash-completion"
+# The key and allow_dev_keys together: either alone is a board that refuses branch builds.
+FILES:${PN}-devkey = "${sysconfdir}/robot/trusted_keys/team.dev.pub"
 FILES:${PN} += " \
     /opt/robot/daemon \
     ${bindir}/robotctl \
@@ -174,15 +177,6 @@ FILES:${PN} += " \
     ${sysconfdir}/systemd/journald.conf.d/10-robot.conf \
     ${localstatedir}/lib/robot \
 "
-
-PACKAGES =+ "${PN}-bash-completion"
-FILES:${PN}-bash-completion = "${datadir}/bash-completion"
-RDEPENDS:${PN}-bash-completion += "${PN} bash-completion"
-
-# The key and allow_dev_keys together: either alone is a board that refuses branch builds.
-PACKAGES =+ "${PN}-devkey"
-FILES:${PN}-devkey = "${sysconfdir}/robot/trusted_keys/team.dev.pub"
-RDEPENDS:${PN}-devkey += "${PN}"
 
 pkg_postinst:${PN}-devkey() {
 	cfg=$D${sysconfdir}/robot/updater.toml
@@ -201,6 +195,8 @@ pkg_postinst:${PN}-devkey() {
 	fi
 }
 
+RDEPENDS:${PN}-bash-completion += "${PN} bash-completion"
+RDEPENDS:${PN}-devkey += "${PN}"
 RDEPENDS:${PN} += "systemd ca-certificates networkmanager bluez5"
 # hooks/postinstall's seeders fetch with curl.
 RDEPENDS:${PN} += "curl"
@@ -208,8 +204,8 @@ RDEPENDS:${PN} += "curl"
 RDEPENDS:${PN} += "coreutils"
 # mediad exits without webrtcsink; gstreamer1.0-rockchip carries the mpph264enc patch.
 RDEPENDS:${PN} += "gstreamer1.0-plugins-rs gstreamer1.0-rockchip"
-RRECOMMENDS:${PN}:append:aarch64 = " onnxruntime"
 # No policy set: robotd is unhealthy and every update rolls back.
 RDEPENDS:${PN} += "microduck-policies"
-RRECOMMENDS:${PN} += "microduck-detector"
 RDEPENDS:${PN} += "microduck-slot-health"
+RRECOMMENDS:${PN}:append:aarch64 = " onnxruntime"
+RRECOMMENDS:${PN} += "microduck-detector"
