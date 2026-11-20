@@ -178,7 +178,7 @@ jobs:
               | "\(.databaseId) \(.headSha) \(.url)"' <<< "$runs" |
             while read -r id sha url; do
               failed=$(gh run view "$id" -R "$GITHUB_REPOSITORY" --json jobs --jq '.jobs[]
-                  | select(any(.steps[]?; .name == "Test the image under QEMU" and .conclusion == "failure"))
+                  | select(any(.steps[]?; (.name | startswith("Test the image")) and .conclusion == "failure"))
                   | .name' | paste -sd, -)
               [ -n "$failed" ] || continue
               msg="newer build ${sha:0:7} failed its QEMU test ($failed), so it is not a candidate; releasing the older ${COMMIT:0:7}. $url"
