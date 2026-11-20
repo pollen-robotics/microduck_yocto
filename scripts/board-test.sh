@@ -7,6 +7,7 @@
 # --motion also runs scripts/board-motion.py: the robot MOVES.
 # Results and index.html land in ./board-test-<host>-<time>/; exits 1 on a failure.
 # BOARD_SSH_OPTS is added to every ssh call (qemu-board-test.sh's port and host key).
+# BOARD_SUDO_PASS gives sudo its password without a prompt (qemu-board-test.sh).
 set -euo pipefail
 
 # shellcheck disable=SC2086,SC2029 # options split on purpose; callers expand locally
@@ -36,6 +37,7 @@ fi
 remote=/tmp/microduck-tests
 sudo=
 [ "$user" = root ] || sudo="sudo"
+[ "$user" = root ] || [ -z "${BOARD_SUDO_PASS:-}" ] || sudo="echo '$BOARD_SUDO_PASS' | sudo -S -p ''"
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
