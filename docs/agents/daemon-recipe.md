@@ -9,9 +9,10 @@ one-line pointers; the reasons live here.
   old line-range checksum broke as soon as the manifest above it was edited (at
   6507d2e `license =` moved from line 28 to 88). md5 `86d3f3a9` is the
   Apache-2.0 text we fetch, so it differs from oe-core's `89aea4e1`.
-- **The build fetches over SSH** (README.md: ssh-agent with a GitHub key).
-  Robots download release assets anonymously over HTTPS, which works only
-  because the repo is public: a *private* repo's
+- **The build fetches anonymously over HTTPS**, as robots download release
+  assets. Both work only because the repo is public. Over ssh, every HF job's
+  fetch failed and fell through to oe-core's https MIRRORS (TASKS.md #33b),
+  and a *private* repo's
   `releases/download/<tag>/<asset>` returns 404 with or without a token
   (updater-design.md §11).
 - **`SRCREV_daemon` is a release's `source_revision`, never `main` nor the tag.**

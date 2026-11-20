@@ -139,10 +139,6 @@ scripts/build-local.sh shell                             # a bitbake shell
 KAS_FILES=kas/microduck.yml:kas/beta.yml scripts/build-local.sh   # the beta board
 ```
 
-The daemon recipe fetches its repository over SSH, so the build needs an
-`ssh-agent` holding a key registered with GitHub, and `KAS_SSH_DIR` pointing at a
-directory with a `known_hosts` that trusts github.com.
-
 Paths are environment variables rather than `local.conf` entries because
 `kas-container` bind-mounts `KAS_BUILD_DIR`, `DL_DIR` and `SSTATE_DIR` into the
 container; a path in `local.conf` would name a host directory the container

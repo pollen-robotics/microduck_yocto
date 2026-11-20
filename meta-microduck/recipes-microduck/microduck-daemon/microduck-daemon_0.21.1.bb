@@ -26,7 +26,7 @@ DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ssh;branch=main;name=daemon \
+SRC_URI = "git://github.com/pollen-robotics/microduck_daemon.git;protocol=https;branch=main;name=daemon \
            git://github.com/pollen-robotics/bmi088-rs;protocol=https;nobranch=1;name=bmi088;destsuffix=bmi088-rs \
            file://60-robot-i2c.rules \
            file://robotctl.bash_completion \
