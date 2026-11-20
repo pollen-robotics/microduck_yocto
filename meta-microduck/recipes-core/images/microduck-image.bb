@@ -65,7 +65,7 @@ BAD_RECOMMENDATIONS += " \
 
 # ssh on the head's USB-C link only; a machine without the gadget (Zero 3W)
 # would be left with no ssh at all.
-IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
+IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RDEPENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
 
 # An allowlist, so a new package cannot bring a setuid binary in unread. No
 # user runs the others (one operator, with sudo); root keeps them, minus the bit.
