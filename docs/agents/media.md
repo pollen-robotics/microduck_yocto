@@ -83,6 +83,33 @@ Each of these builds and loads fine and fails only when a pipeline starts.
   reaches ebc758a; until then recheck that its `SRC_URI` is still the one git
   entry we replace.
 
+## gstreamer1.0-plugins-rs: six repositories
+
+gst-plugins-rs takes its bindings from git (`gst = { git = ".../gstreamer-rs",
+branch = "0.25" }`), and `cargo-update-recipe-crates` vendors only crates.io
+entries, so they never reach `crates.inc` and `--frozen` cannot resolve them.
+Every 1.28.x tag does this, which is why no upstream recipe exists.
+
+Fetching only gstreamer-rs is not enough: **cargo resolves the whole workspace
+even when `--package` names a few members**, so the first attempt failed on
+`glib` from gtk-rs-core, for gst-plugin-analytics, which we do not build. All
+five git repositories are fetched; only the three packages we name compile.
+Each SRCREV is the commit Cargo.lock pins, not a branch tip, so a build is the
+combination upstream resolved.
+
+`cargo_common_do_patch_paths` writes one `[patch]` entry per SRC_URI repository,
+but these hold 70 crates (39 in gstreamer-rs, some nested two deep, like
+`gstreamer-gl/egl/sys`). `microduck_cargo_git_patch_paths` replaces them with
+one entry per crate, all taken from the lockfile and the checkouts, so a SRCREV
+that moves a crate fails the build and names it. The class's entries still
+matter: their `name` and `destsuffix` make it strip the git sources out of
+Cargo.lock (keeping the `.orig` the function reads).
+
+No `S`: the main checkout lands at bitbake.conf's default, `${UNPACKDIR}/${BP}`,
+and `S = "${UNPACKDIR}/git"` is a do_unpack error (it failed the first build).
+The other checkouts land beside it, under their repository names, which the
+patch function relies on.
+
 ## Why `PACKAGE_ARCH` comes before `inherit packagegroup`
 
 `packagegroup.bbclass` snapshots it (`PACKAGE_ARCH_EXPANDED := ...`) to decide
