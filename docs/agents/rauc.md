@@ -459,7 +459,8 @@ Each of those reboots spends an attempt, so a slot on trial that never reaches
   (2026-09-25)**: a writable U-Boot environment
   (`recipes-bsp/u-boot/files/rauc-env.cfg`) plus `/etc/fw_env.config` and
   U-Boot's default env as `/etc/u-boot-initial-env`, both installed by oe-core's
-  `u-boot.inc` into `u-boot-rockchip-env`; `fw_printenv`/`fw_setenv` arrive via
+  `u-boot.inc` into `u-boot-rockchip-env` (an RDEPENDS of our `rauc-conf`, by
+  its RPROVIDES `u-boot-default-env`); `fw_printenv`/`fw_setenv` arrive via
   meta-rauc's own RDEPENDS. The proof is that **U-Boot reads what Linux
   writes**, not merely that Linux reads back its own write: `fw_setenv bootargs
   microduck.envprobe=1`, reboot, and the token led `/proc/cmdline`. `bootargs` is

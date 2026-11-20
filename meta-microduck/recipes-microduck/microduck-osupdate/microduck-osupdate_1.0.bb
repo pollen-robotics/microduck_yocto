@@ -34,4 +34,5 @@ FILES:${PN} += "${systemd_system_unitdir}/microduck-osupdate@.service"
 # rauc to install, curl to fetch (with resume), flock/sha256sum from util-linux and
 # coreutils or busybox, systemd-run for the detached apply.
 # u-boot-fw-utils: fw_printenv, which apply reads BOOT_<slot>_LEFT with.
-RDEPENDS:${PN} = "rauc curl systemd util-linux-flock u-boot-fw-utils"
+# ca-certificates: the bundle is fetched over HTTPS; curl only RRECOMMENDS it.
+RDEPENDS:${PN} = "rauc curl systemd util-linux-flock u-boot-fw-utils ca-certificates"

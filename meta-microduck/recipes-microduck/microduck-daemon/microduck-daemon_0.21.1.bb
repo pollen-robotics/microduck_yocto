@@ -204,6 +204,10 @@ RDEPENDS:${PN} += "curl"
 RDEPENDS:${PN} += "coreutils"
 # mediad exits without webrtcsink; gstreamer1.0-rockchip carries the mpph264enc patch.
 RDEPENDS:${PN} += "gstreamer1.0-plugins-rs gstreamer1.0-rockchip"
+# The rest of mediad's elements, and media-ctl/v4l2-ctl. layer.conf: safe dep.
+RDEPENDS:${PN} += "packagegroup-microduck-media"
+# robotd plays sounds with aplay; pet-detect records with arecord (same package).
+RDEPENDS:${PN} += "alsa-utils-aplay"
 # No policy set: robotd is unhealthy and every update rolls back.
 RDEPENDS:${PN} += "microduck-policies"
 RDEPENDS:${PN} += "microduck-slot-health"

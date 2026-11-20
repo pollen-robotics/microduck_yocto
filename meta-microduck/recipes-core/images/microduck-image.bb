@@ -65,7 +65,7 @@ BAD_RECOMMENDATIONS += " \
 
 # ssh on the head's USB-C link only; a machine without the gadget (Zero 3W)
 # would be left with no ssh at all.
-IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
+IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RDEPENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
 
 # An allowlist, so a new package cannot bring a setuid binary in unread. No
 # user runs the others (one operator, with sudo); root keeps them, minus the bit.
@@ -85,8 +85,9 @@ microduck_setuid_allowlist() {
 	done
 }
 
+# Only what the image chooses: a package that another one needs at runtime is that
+# package's RDEPENDS, not a line here (rauc, the media stack, aplay come that way).
 # padd: a shipping robot is driven with a gamepad.
-# alsa-utils-aplay: robotd plays every sound through `aplay`.
 # ldd: cargo-dist installers (rustypot-wizard's) read the glibc version with it.
 # MICRODUCK_RADIO_PACKAGES: per machine; BLE provisioning needs the attach unit.
 IMAGE_INSTALL:append = " \
@@ -94,18 +95,11 @@ IMAGE_INSTALL:append = " \
     microduck-daemon \
     microduck-daemon-padd \
     microduck-board \
-    rauc \
-    u-boot-rockchip-env \
     microduck-data \
-    microduck-osupdate \
-    packagegroup-microduck-media \
-    alsa-utils-aplay \
     ldd \
     rustypot-wizard \
     sudo \
     kernel-modules \
-    ca-certificates \
-    networkmanager \
     ${MICRODUCK_RADIO_PACKAGES} \
     i2c-tools \
     htop \
