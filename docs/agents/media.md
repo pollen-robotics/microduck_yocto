@@ -55,6 +55,22 @@ Armbian prototype's hand-rolled `99-robot-mpp.rules`. `video`, not `robot`:
 - `rockchip-rkaiq`/`rkisp` stay out: the beta gets Seeed's rkaiq and tuning
   from `microduck-beta-camera`, and the Zero 3W's IMX219 has no tuning file.
 
+## WebRTC: what oe-core leaves out
+
+Each of these builds and loads fine and fails only when a pipeline starts.
+
+- **webrtcbin** (plugins-bad): oe-core's default `PACKAGECONFIG` has no
+  `webrtc`, so webrtcsink fails with "no element webrtcbin". `srtp` comes with
+  it (media encryption), and meson refuses `webrtc` without `sctp` (data
+  channels, which mediad's `control` and `teleop` use).
+- **libnice's GStreamer elements**: webrtcbin looks up the `nicesrc`/`nicesink`
+  factories before it prerolls, and fails with "libnice elements are not
+  available" (measured 2026-09-10). meta-oe's libnice defaults to
+  `-Dgstreamer=disabled`, and the library alone arrived only as a shlib
+  dependency, so nothing noticed. Its `gstreamer` option puts the plugin in
+  the libnice package (there is no `gstreamer1.0-nice` in meta-oe), and
+  plugins-bad's `-webrtc` now RDEPENDS on libnice to say so.
+
 ## Why `PACKAGE_ARCH` comes before `inherit packagegroup`
 
 `packagegroup.bbclass` snapshots it (`PACKAGE_ARCH_EXPANDED := ...`) to decide
