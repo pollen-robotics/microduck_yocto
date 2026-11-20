@@ -1,0 +1,45 @@
+name: script-tests
+
+# The scripts' unit tests (scripts/test-*), against stubs: seconds, no build.
+# test-uboot-bootcmd.sh is left out: it needs a U-Boot sandbox built first.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  scripts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      # Each under its shebang's shell (sh is dash here, like the board's), and
+      # under dash too where the test takes TEST_SH.
+      - name: Shell tests
+        run: |
+          set -u
+          rc=0
+          for t in scripts/test-*.sh; do
+            case "$t" in *uboot-bootcmd*|*ssh-access*|*hfjob-sstate*) continue ;; esac
+            shell=$(head -1 "$t" | sed 's|^#! *.*/||')
+            echo "::group::$t ($shell)"; "$shell" "$t" || { rc=1; echo "::error::$t failed"; }; echo "::endgroup::"
+            if grep -q TEST_SH "$t"; then
+              echo "::group::$t (TEST_SH=dash)"; TEST_SH=dash "$shell" "$t" || { rc=1; echo "::error::$t failed under dash"; }; echo "::endgroup::"
+            fi
+          done
+          exit $rc
+
+      - name: osupdate page
+        run: node scripts/test-osupdate-page.mjs
+
+      - name: ssh access (systemd in Docker)
+        run: scripts/test-ssh-access.sh
+
+      - name: HF job sstate handling (kas image)
+        run: scripts/test-hfjob-sstate.sh
