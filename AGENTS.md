@@ -112,6 +112,8 @@ Topics too long for this file, each a list of things that bite:
 - `docs/agents/daemon-recipe.md` — why each line of `microduck-daemon_*.bb`
   is there: the pin, the bmi088 git dep, users and groups, the release tree,
   the package splits, every runtime dependency. The recipe keeps only pointers.
+- `docs/agents/kernel.md` — the kernel append: why Armbian's tree with radxa's
+  DTS and defconfig, the CVE backports, the DTB-only `boot.img`, the board patches.
 - `docs/agents/media.md` — the GStreamer plugins the image installs and how
   to re-measure them, the MPP/RGA device permissions, the MPP encoders that
   only exist on hardware.

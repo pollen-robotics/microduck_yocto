@@ -9,18 +9,12 @@ HOMEPAGE = "https://github.com/Seeed-Studio/seeed_armbian_extension"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://NOTICE;md5=9645f39e9db895a4aa6e02cb57294595"
 
-# librkaiq.so links libdrm.so.2. Without libdrm in DEPENDS the shlib scan has no
-# provider for it and package_qa fails (file-rdeps); with it the runtime
-# dependency is added automatically. m4, xxd and coreutils' tac (header_strip.sh;
-# not among bitbake's HOSTTOOLS) generate the IQ parser's headers at build time.
+# libdrm: librkaiq links it. m4, xxd and tac (not a HOSTTOOL) generate the IQ
+# parser's headers.
 DEPENDS += "libdrm m4-native xxd-native coreutils-native"
 
-# rkaiq v6.0x32.0 from source, as Seeed publishes it: camera_engine_rkaiq on the
-# deb_source branch of their public seeed_armbian_extension, with this module's
-# IQ file in rkaiq/iqfiles/isp21. Not meta-rockchip's rockchip-rkaiq: the IQ
-# file's format follows rkaiq's version, Seeed tuned this module against
-# v6.0x32, and meta-rockchip builds a 2024-04 snapshot (v6.0x6.1). Same source
-# commit as recipes-kernel/wq9201s.
+# Seeed's rkaiq v6.0x32 source, not meta-rockchip's v6.0x6.1: the IQ file's
+# format follows rkaiq's version, and Seeed tuned this module against v6.0x32.
 require recipes-kernel/wq9201s/seeed-deb-source.inc
 SRC_URI = " \
     ${SEEED_DEB_SOURCE} \
@@ -50,10 +44,8 @@ EXTRA_OECMAKE = " \
     -DCMAKE_SKIP_RPATH=TRUE \
 "
 
-# Two of meta-rockchip's rockchip-rkaiq fixes that are about our toolchain, not
-# its snapshot: -Werror (Seeed builds with GCC 10, wrynose has 15), and the IQ
-# parser's header generation, which runs the C compiler as a preprocessor without
-# the sysroot's include path.
+# From meta-rockchip's rockchip-rkaiq: no -Werror under GCC 15, and the sysroot
+# include path for the IQ parser's preprocessor run.
 rkaiq_fix_build() {
 	sed -i 's/-Werror//' ${S}/rkaiq/cmake/CompileOptions.cmake
 	sed -i "s/\( \${CMAKE_C_COMPILER}\)/\1 -I\${CMAKE_SYSROOT}\/usr\/include/" \
@@ -70,10 +62,8 @@ do_generate_toolchain_file:append() {
 	echo "set( CMAKE_SYSROOT ${STAGING_DIR_HOST} )" >> ${UNPACKDIR}/toolchain.cmake
 }
 
-# Only what the server loads: it maps librkaiq.so and nothing else of the
-# package's libraries (read from /proc/<pid>/maps on a beta, with Seeed's build).
-# Only the GC2093's IQ file. rkaiq's own install layout varies by version (the
-# server has landed in usr/usr/bin), so stage it and pick the files out by name.
+# Only what the server maps (/proc/<pid>/maps) and the GC2093's IQ file, picked
+# by name: rkaiq's install layout varies by version.
 do_install() {
 	DESTDIR=${B}/staging cmake_runcmake_build --target ${OECMAKE_TARGET_INSTALL}
 	install -d ${D}${libdir} ${D}${bindir} ${D}${sysconfdir}/iqfiles
