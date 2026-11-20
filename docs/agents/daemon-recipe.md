@@ -178,3 +178,35 @@ one-line pointers; the reasons live here.
 | microduck-policies | no policy set → `unhealthy` → every update rolls back. Bump with the daemon's `POLICY_VERSION` |
 | microduck-detector (RRECOMMENDS) | detector off by default. Bump with `DETECTOR_VERSION` |
 | microduck-slot-health | RAUC marks a slot good on the same check as robot-boot-check |
+
+## Policy set (`microduck-policies_<version>.bb`)
+
+- **Why the image ships it.** robotd loads every slot from
+  `/opt/robot/policies/current`; a missing file is `unhealthy` ("policy
+  unavailable: reading .../velstand.onnx"), and the update health gate rolls
+  back on that. Each *attempted* apply downloaded, swapped, failed the gate and
+  reverted. With servo power off the bus check returns `degraded` first and an
+  apply passes, so it only bites a powered robot, the one anyone looks at.
+- **Why not the daemon's seeder.** `scripts/seed-policies.sh` runs from
+  `hooks/postinstall` and `install.sh`; an image runs neither. At first boot it
+  would need curl and the network before the first update check, which a robot
+  provisioned over BLE does not have yet.
+- **The seeder leaves the image's set alone.** It reads `.source`, compares
+  `version` to its own `POLICY_VERSION` and exits 0 at or above it. A set from
+  another repo, or with no record, it never touches. So the `.source` keys must
+  match `updater::policy::Source::render()`.
+- **The pin is the daemon's.** `PV` is `POLICY_VERSION` in the release's
+  `seed-policies.sh` (held against `[workspace.metadata.policies]` by an xtask
+  test); rename the recipe with the daemon bump. v5: 0.13.0–0.15.1, v7:
+  0.15.2–0.16.1, v8: 0.16.2–0.18.8, v9: 0.19.0–0.20.1, v10: 0.21.0+. Seeding
+  *below* the daemon's version breaks it (its defaults name files only newer
+  sets have, and the seeder then fetches over the network); above is safe.
+- v9 is v7's velstand again (v8's was worse on the robot), renumbered because
+  the seeder only moves a board up. v10 is v9 with a new `roller.onnx` only.
+- **Fetch by commit.** A Hub tag is a mutable ref. v10's tag is lightweight;
+  v9 and v7 were annotated tags, pinned at the commits they peel to.
+- `manifest.json` ships too: robotd-params reads skill periods and ramps from
+  it and falls back to hard-coded numbers without it.
+- `seed-<PV>` under `releases/`, with a relative `current` symlink: the same
+  layout `updater/src/policy.rs` installs, and the `seed-` prefix is what both
+  the seeder and updaterd treat as replaceable.

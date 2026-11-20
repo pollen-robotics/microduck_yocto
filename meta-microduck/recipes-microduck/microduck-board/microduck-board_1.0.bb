@@ -17,27 +17,9 @@ INHIBIT_DEFAULT_DEPS = "1"
 # robotd.toml is the daemon's conffile; this edits it in place, so it must be there.
 RDEPENDS:${PN} = "microduck-daemon"
 
-# Only when the daemon in the image knows the key. microduck_daemon added [board]
-# (robotd-params/src/board.rs) after 0.15.0, and robotd's Params is
-# deny_unknown_fields: a [board] table in front of a daemon that predates it is a
-# robotd that will not start. The release's own template says which kind it is --
-# the daemon that knows the key ships a [board] table in deploy/robotd.toml -- so
-# this declares only into a file that already has the table, and is a logged no-op
-# otherwise. The image's daemon has carried the change since the pin moved to 0.15.3,
-# so it declares; the guard stays for any image built against an older daemon.
-#
-# A board name newer than the daemon is the same failure one level down: robotd
-# reads [board] version as an enum, so a name its release does not know is a
-# parse error and a robotd that will not start. The names are serde's, compiled
-# into robotd as plain strings, so the seeded binary is asked directly; a name it
-# lacks is replaced by MICRODUCK_BOARD_FALLBACK (face-board-v1 -> beta), or not
-# declared at all when there is none. Not the template's comment: a reworded
-# comment would silently drop the board.
-#
-# Scoped to the [board] table: the commented `# version = "zero3"` line under it
-# becomes `version = "<board>"`, or the line is added under the header. Same result
-# as install.sh's declare_board, without its assumption that no other table has a
-# `version` key.
+# robotd refuses unknown keys and unknown board names and then will not start.
+# So: declare only into a template that has a [board] table, and only a name
+# the seeded robotd binary contains (else MICRODUCK_BOARD_FALLBACK, else none).
 pkg_postinst:${PN}() {
 	board="${MICRODUCK_BOARD}"
 	fallback="${MICRODUCK_BOARD_FALLBACK}"

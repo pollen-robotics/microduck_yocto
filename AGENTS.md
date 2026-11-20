@@ -112,6 +112,9 @@ Topics too long for this file, each a list of things that bite:
 - `docs/agents/daemon-recipe.md` — why each line of `microduck-daemon_*.bb`
   is there: the pin, the bmi088 git dep, users and groups, the release tree,
   the package splits, every runtime dependency. The recipe keeps only pointers.
+- `docs/agents/media.md` — the GStreamer plugins the image installs and how
+  to re-measure them, the MPP/RGA device permissions, the MPP encoders that
+  only exist on hardware.
 - `docs/agents/gst-tracers.md` — measuring the media pipeline (dev image): why
   `mediad` needs `RUST_LOG=gst=debug` and a WebRTC consumer before tracers say
   anything, why the CSV tracers never write from inside it, and the measured
@@ -188,7 +191,9 @@ only thing that may differ between hosts; anything else belongs in
 
 - **UART2 is contested.** `MICRODUCK_MOTOR_UART` in `microduck-common.inc`
   switches UART2 between the serial console and `robotd`'s Dynamixel bus. It
-  defaults to `1` (motors) since 2026-09-10 — through bring-up it was `0`, but
+  defaults to `1` (motors) since 2026-09-10, and only a machine conf can set it:
+  the kernel recipe and `SERIAL_CONSOLES` never see an image recipe's value.
+  Through bring-up it was `0`, but
   no UART adapter was ever attached to read that console and `robotd` needs
   `/dev/ttyS2`. Note it only silences *Linux* — U-Boot's
   `CONFIG_DEBUG_UART_BASE` is UART2 too, so U-Boot still prints onto the motor
@@ -248,7 +253,7 @@ Three recipe constraints, all load-bearing:
   already cost a board: ONNX Runtime, looked for in a directory the recipe did
   not write (`recipes-microduck/onnxruntime`), and the policy set, whose absence
   makes `robotd` report `unhealthy` and every attempted update roll back
-  (`recipes-microduck/microduck-policies`, which carries that story in full).
+  (`docs/agents/daemon-recipe.md`, "Policy set").
   So when reading a daemon release, read `hooks/postinstall` for what it does to
   a board, not just the units it installs — and give the scripts themselves what
   they ask for: they are POSIX shell and fetch with `curl`, which the daemon
@@ -285,8 +290,16 @@ new element (audio, an overlay, another encoder) still builds, and mediad then
 fails on the robot with "no element ...". Read the release's
 `ElementFactory::make` calls in `mediad/src`, and for anything new add its
 plugin's package to the packagegroup and its plugin name to the list in
-`scripts/qemu-test.sh`. The packagegroup's comment says how the list was
+`scripts/qemu-test.sh`. `docs/agents/media.md` says how the list was
 measured and how to measure it again.
+
+## Comments
+
+Default: no comment. Add one only for the *why* a reader would otherwise
+"fix", in one to three lines, in recipes, confs and scripts alike. Never what
+the next line does. Investigations, measurements and history go in the commit message or
+`docs/agents/`, and the comment points there. When touching a recipe, trim its
+long comments in the same change.
 
 ## Commits
 
