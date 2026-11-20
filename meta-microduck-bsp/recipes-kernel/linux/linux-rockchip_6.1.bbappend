@@ -23,6 +23,7 @@ SRC_URI += " \
     file://microduck-trim-debug.cfg \
     file://microduck-trim-fs.cfg \
     file://microduck-trim-input.cfg \
+    file://microduck-trim-keep.cfg \
     file://microduck-trim-net.cfg \
     file://microduck-trim-storage.cfg \
     file://microduck-trim-virt.cfg \
