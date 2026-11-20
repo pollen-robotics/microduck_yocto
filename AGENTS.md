@@ -188,7 +188,9 @@ only thing that may differ between hosts; anything else belongs in
 
 - **UART2 is contested.** `MICRODUCK_MOTOR_UART` in `microduck-common.inc`
   switches UART2 between the serial console and `robotd`'s Dynamixel bus. It
-  defaults to `1` (motors) since 2026-09-10 — through bring-up it was `0`, but
+  defaults to `1` (motors) since 2026-09-10, and only a machine conf can set it:
+  the kernel recipe and `SERIAL_CONSOLES` never see an image recipe's value.
+  Through bring-up it was `0`, but
   no UART adapter was ever attached to read that console and `robotd` needs
   `/dev/ttyS2`. Note it only silences *Linux* — U-Boot's
   `CONFIG_DEBUG_UART_BASE` is UART2 too, so U-Boot still prints onto the motor
