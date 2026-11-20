@@ -12,10 +12,6 @@
 # over ssh needs three levels of quoting (ssh '...', sh -c "...", --runtime-args
 # "...") and silently truncates when one is wrong -- which produced a build that
 # wrote a zero-byte log and never started a container.
-#
-# --ssh-agent forwards the auth socket for the private microduck_daemon fetch, and
-# validates an agent is actually reachable, so over ssh connect with `ssh -A`.
-# Set KAS_SSH_DIR to a directory holding a known_hosts with github.com in it.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -25,4 +21,4 @@ CMD=${1:-build}
 KAS_FILES=${KAS_FILES:-kas/microduck.yml}
 [ $# -gt 0 ] && shift
 
-kas-container --ssh-agent "$CMD" "$KAS_FILES" "$@"
+kas-container "$CMD" "$KAS_FILES" "$@"
