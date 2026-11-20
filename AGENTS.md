@@ -248,7 +248,7 @@ Three recipe constraints, all load-bearing:
   already cost a board: ONNX Runtime, looked for in a directory the recipe did
   not write (`recipes-microduck/onnxruntime`), and the policy set, whose absence
   makes `robotd` report `unhealthy` and every attempted update roll back
-  (`recipes-microduck/microduck-policies`, which carries that story in full).
+  (`docs/agents/daemon-recipe.md`, "Policy set").
   So when reading a daemon release, read `hooks/postinstall` for what it does to
   a board, not just the units it installs — and give the scripts themselves what
   they ask for: they are POSIX shell and fetch with `curl`, which the daemon
