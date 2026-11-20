@@ -262,7 +262,7 @@ Three recipe constraints, all load-bearing:
   they ask for: they are POSIX shell and fetch with `curl`, which the daemon
   recipe therefore pulls in.
 
-And three **paths** that the image now depends on, so a daemon change that moves
+And the **paths** and one rule that the image now depends on, so a daemon change that moves
 any of them breaks A/B without touching a single Yocto file:
 
 - `/var/lib/robot` is a **mount point** for the persistent `data` partition.
@@ -271,9 +271,14 @@ any of them breaks A/B without touching a single Yocto file:
   it lives there. Anything that must persist goes under this root; nothing that
   renames across it and the rootfs is atomic.
 - `/opt/robot/daemon` stays **on the rootfs**, on purpose. It is core: replaced
-  by the image, reseeded on flash, converged by `updaterd`. Do not move it to
-  `/var/lib/robot` to "make it persist" — that would let a slot switch and a
+  by the image, reseeded on flash, converged by `updaterd` on the dev image only.
+  The shipping image's `/` is read-only, so there the daemon is the image's and
+  `updater.toml` pins it (`docs/agents/rauc.md`, "Read-only rootfs"). Do not move
+  it to `/var/lib/robot` to "make it persist" — that would let a slot switch and a
   daemon update disagree about which release is installed.
+- **Nothing may write to `/` at runtime on the shipping image.** A new service
+  that keeps state puts it on data (`/var/lib/robot`) or in RAM; the dev image's
+  `/` is writable, so only a candidate bundle on a board shows the mistake.
 - `/var/lib/robot/updater/update.lock` is the lock `updaterd` holds for a
   daemon install, rollback or select, from download to health check, and
   `microduck-osupdate` holds it through an OS update until it asks for the

@@ -58,6 +58,47 @@ microduck_build_id() {
 
 IMAGE_FEATURES += "ssh-server-openssh"
 
+# / stays read-only (`ro` in the DTB's bootargs); the dev image drops this and
+# remounts it rw. Writable state is on data or in RAM: docs/agents/rauc.md,
+# "Read-only rootfs".
+IMAGE_FEATURES += "read-only-rootfs"
+# :append, to run after oe-core's read_only_rootfs_hook (a +=, parsed later).
+ROOTFS_POSTPROCESS_COMMAND:append = " ${@bb.utils.contains('IMAGE_FEATURES', 'read-only-rootfs', 'microduck_read_only_rootfs', '', d)}"
+microduck_read_only_rootfs() {
+	fstab=${IMAGE_ROOTFS}${sysconfdir}/fstab
+	sed -i 's/,x-systemd\.growfs//' $fstab
+	grep -q '^/dev/root[[:space:]]\+/[[:space:]]\+auto[[:space:]]\+ro[[:space:]]' $fstab \
+		|| bbfatal "fstab's root line is not 'ro' after read_only_rootfs_hook"
+
+	# The daemon comes with the OS: a release's postinstall writes /etc and /usr,
+	# so updaterd could only fail. Pinned to the image's own, never polled for.
+	cfg=${IMAGE_ROOTFS}${sysconfdir}/robot/updater.toml
+	ver=$(readlink ${IMAGE_ROOTFS}/opt/robot/daemon/current)
+	ver=${ver#releases/}
+	sed -i -e '/^check_interval[[:space:]]*=/d' \
+		-e 's/^auto_apply[[:space:]]*=.*/auto_apply = "off"/' \
+		-e "/^\[component\.daemon\]\$/a pinned = \"$ver\"" $cfg
+	grep -qx 'auto_apply = "off"' $cfg && grep -qx "pinned = \"$ver\"" $cfg \
+		&& ! grep -q '^check_interval' $cfg \
+		|| bbfatal "updater.toml changed upstream; daemon updates not turned off"
+
+	# A flashed slot's machine-id is transient on a read-only /; commit it once.
+	# An installed slot gets the running one from the bundle hook instead.
+	# An empty Condition*= drops all of the unit's conditions: restore the one
+	# that limits it to a transient id, or / goes rw on every boot.
+	d=${IMAGE_ROOTFS}${sysconfdir}/systemd/system/systemd-machine-id-commit.service.d
+	install -d $d
+	cat > $d/microduck-read-only.conf <<-'EOF'
+		[Unit]
+		ConditionPathIsReadWrite=
+		ConditionPathIsMountPoint=${sysconfdir}/machine-id
+
+		[Service]
+		ExecStart=
+		ExecStart=/bin/sh -c 'mount -o remount,rw / && systemd-machine-id-setup --commit; r=$?; mount -o remount,ro /; exit $r'
+	EOF
+}
+
 # Only the GStreamer plugins mediad loads (packagegroup-microduck-media): each
 # set's -meta RDEPENDS on all ~190. The dev image keeps this so a gap shows there first.
 BAD_RECOMMENDATIONS += " \
