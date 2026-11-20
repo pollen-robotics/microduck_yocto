@@ -80,9 +80,12 @@
 	 * Unlike the Zero 3W, earlycon and console=ttyFIQ0 are wanted and safe:
 	 * UART2 (0xfe660000) is the debug UART on test pads TP83/TP84 (sheet 24,
 	 * "Default debug UART 3.3V"), not the motor bus.
+	 *
+	 * ro: the shipping image's / stays read-only; the dev image's fstab
+	 * remounts it read-write (docs/agents/rauc.md, "Read-only rootfs").
 	 */
 	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xfe660000 console=ttyFIQ0 rw rootwait";
+		bootargs = "earlycon=uart8250,mmio32,0xfe660000 console=ttyFIQ0 ro rootwait";
 	};
 
 	/* Sheet 4/5: the battery feeds two TPS54302 bucks. */
