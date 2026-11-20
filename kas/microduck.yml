@@ -113,3 +113,11 @@ local_conf_header:
     # bitbake.)
     BB_GIT_SHALLOW:pn-linux-rockchip = "1"
     BB_GIT_SHALLOW_DEPTH:pn-linux-rockchip = "1"
+
+  dead-src-urls: |
+    # Upstream SRC_URIs that no longer answer: Debian dropped ca-certificates
+    # 20260816 from its pool, and gmplib.org refuses connections.
+    PREMIRRORS:prepend = "\
+        http://deb.debian.org/debian/pool/main/c/ca-certificates/.* http://snapshot.debian.org/archive/debian/20260901T000000Z/pool/main/c/ca-certificates/ \
+        https://gmplib.org/download/gmp/.* ${GNU_MIRROR}/gmp/ \
+    "
