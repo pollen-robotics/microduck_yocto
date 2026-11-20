@@ -24,6 +24,8 @@ PACKAGE_ARCH:microduck = "${MACHINE_ARCH}"
 
 PACKAGES:prepend:microduck = "${PN}-dev-ca "
 FILES:${PN}-dev-ca = "${nonarch_libdir}/rauc/ca-dev.cert.pem"
+# bootloader=uboot: rauc's fw_printenv needs /etc/fw_env.config (u-boot-*-env).
+RDEPENDS:${PN}:append:microduck = " u-boot-default-env"
 RDEPENDS:${PN}-dev-ca = "${PN}"
 # At do_rootfs, where $D is the image root. RAUC reads every certificate in the
 # keyring file.
