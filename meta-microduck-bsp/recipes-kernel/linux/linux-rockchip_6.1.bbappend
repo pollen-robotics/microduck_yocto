@@ -10,12 +10,22 @@ SRC_URI = " \
     file://radxa-rockchip-linux.kconfig \
     file://cgroups.cfg \
     file://mali-csf.cfg \
-    file://no-bcmdhd.cfg \
     file://no-mali400.cfg \
     file://no-mali-gpu.cfg \
     file://qemu-virt.cfg \
     file://rauc.cfg \
     file://watchdog.cfg \
+"
+
+# Radxa's defconfig is for every board radxa sells; these take out what no
+# microduck has. One fragment per area, so a regression bisects to one.
+SRC_URI += " \
+    file://microduck-trim-debug.cfg \
+    file://microduck-trim-fs.cfg \
+    file://microduck-trim-input.cfg \
+    file://microduck-trim-net.cfg \
+    file://microduck-trim-storage.cfg \
+    file://microduck-trim-virt.cfg \
 "
 
 # Exploited-CVE backports (docs/agents/kernel.md has the table). Drop each once
@@ -73,7 +83,7 @@ microduck_install_board_dts() {
 }
 do_patch[postfuncs] += "microduck_install_board_dts"
 
-SRC_URI:append:microduck-beta = " file://microduck-beta.cfg"
+SRC_URI:append:microduck-beta = " file://microduck-beta.cfg file://microduck-trim-display.cfg file://microduck-trim-media.cfg"
 
 # Only on this machine, so the other boards' kernels stay byte-identical.
 SRC_URI:append:microduck-face-board-v1 = " \
@@ -85,11 +95,15 @@ SRC_URI:append:microduck-face-board-v1 = " \
 # After every SRC_URI line, as oelint.var.order wants.
 SRCREV = "e97b8a3f30473ea345e0603a1390bb46fa7cc4f2"
 
-# merge_config drops a line whose dependency is missing, silently.
+# merge_config drops a line whose dependency is missing, silently, and another
+# option's `select` turns an "is not set" back on just as silently.
 microduck_check_kernel_fragments() {
 	for frag in ${@' '.join(u.split('://')[1].split(';')[0] for u in d.getVar('SRC_URI').split() if u.startswith('file://microduck-') and u.endswith('.cfg'))}; do
-		for line in $(grep -vE '^[[:space:]]*(#|$)' ${UNPACKDIR}/$frag); do
+		for line in $(grep -E '^CONFIG_' ${UNPACKDIR}/$frag); do
 			grep -qxF "$line" ${B}/.config || bbfatal "$frag: '$line' is not in the merged ${B}/.config"
+		done
+		for sym in $(sed -n 's/^# \(CONFIG_[A-Za-z0-9_]*\) is not set$/\1/p' ${UNPACKDIR}/$frag); do
+			! grep -qE "^$sym=" ${B}/.config || bbfatal "$frag: $sym is off in the fragment but $(grep -E "^$sym=" ${B}/.config) in ${B}/.config"
 		done
 	done
 }
