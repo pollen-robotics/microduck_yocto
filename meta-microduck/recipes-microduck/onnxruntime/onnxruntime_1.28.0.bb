@@ -8,36 +8,19 @@ HOMEPAGE = "https://onnxruntime.ai"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=0f7e3b1308cb5c00b372a6e78835732d"
 
-# The prebuilt release, which is what microduck_daemon's scripts/setup-board.sh
-# fetches. Building ONNX Runtime from source needs protobuf, abseil, onnx and a long
-# CMake build, and there is no oe-core recipe for it -- not worth it for a library we
-# only dlopen.
-#
-# Version: the workspace pins [workspace.metadata.onnxruntime] floor = "1.23",
-# target = "1.28.0". The floor exists because a board once shipped 1.20.1 against an
-# `ort` that panics below 1.23, so keep this at or above the floor and in step with
-# the `ort` dependency.
+# Prebuilt: a source build pulls protobuf, abseil and onnx for a library we only
+# dlopen. Keep PV at or above the daemon's onnxruntime floor (1.23): ort panics below.
 SRC_URI = "https://github.com/microsoft/onnxruntime/releases/download/v${PV}/onnxruntime-linux-aarch64-${PV}.tgz"
 SRC_URI[sha256sum] = "e15ff8b5d85afe6c144d97c6fd432254bf76a219daaf17658087d6ecb3e8f0bb"
 
-# The tarball unpacks to its own name, not ${BP}. (Setting S is only forbidden for
-# the ${UNPACKDIR}/git case -- see AGENTS.md.)
 S = "${UNPACKDIR}/onnxruntime-linux-aarch64-${PV}"
 
-# An aarch64 binary drop.
 COMPATIBLE_HOST = "aarch64.*-linux"
 
-# Prebuilt: no configure/compile. Our do_install replaces the class's, which
-# copies ${S} as-is and this archive is not laid out like a rootfs.
+# Our do_install replaces the class's: the archive is not laid out like a rootfs.
 inherit bin_package
 
-# No `cp -a` anywhere below, deliberately. Microsoft's tarball is owned by their
-# build user (uid 1004), and -a preserves that, which fails do_package with:
-#
-#   KeyError: 'getpwuid(): uid not found: 1004' ... may be due to host contamination
-#
-# `install` and plain `cp -R` create root-owned files instead, and the symlink chain
-# is recreated rather than copied.
+# Never `cp -a`: it keeps Microsoft's uid 1004, and do_package fails on it.
 do_install() {
 	install -d ${D}${libdir}
 	install -m 0755 ${S}/lib/libonnxruntime.so.${PV} ${D}${libdir}/
