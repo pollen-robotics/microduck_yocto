@@ -17,6 +17,7 @@ SRC_URI = " \
     file://microduck-data-grow \
     file://microduck-data-grow.service \
 "
+S = "${UNPACKDIR}"
 
 inherit systemd features_check
 REQUIRED_DISTRO_FEATURES = "systemd"
