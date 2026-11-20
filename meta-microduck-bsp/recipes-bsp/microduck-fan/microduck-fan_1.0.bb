@@ -2,8 +2,8 @@ SUMMARY = "Temperature-driven fan control for microduck boards with a fan"
 DESCRIPTION = "Switches soc-thermal, where the device tree puts the fan's \
 trips, to the step_wise governor, so the fan stays off when the SoC is cool and \
 steps up with temperature instead of running at the full duty pwm-fan starts at."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = "file://70-microduck-fan.rules"
 

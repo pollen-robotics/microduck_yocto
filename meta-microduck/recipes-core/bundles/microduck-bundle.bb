@@ -26,7 +26,8 @@ RAUC_BUNDLE_SLOTS = "rootfs"
 
 # Fetching anything (the hook below) makes do_populate_lic demand a checksum;
 # bundle.bbclass only sets LICENSE ?= "MIT". Same line as the microduck-data recipe.
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 # The hook refuses a card whose U-Boot still boots the `boot` partition: there a
 # new kernel in the slot would never run, against its own modules. See the hook.
 SRC_URI = "file://microduck-bundle-hook"

@@ -3,8 +3,8 @@ DESCRIPTION = "A systemd-shutdown hook that puts every cpufreq policy on the \
 performance governor as the last step of a reboot. The beta board's RK860 keeps \
 its voltage across a warm reset, and a reboot from idle (850 mV) hangs the next \
 boot before Linux."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = "file://microduck-cpu-voltage"
 

@@ -2,8 +2,8 @@ SUMMARY = "Gate RAUC's good-boot marking on the robot's daemons being healthy"
 DESCRIPTION = "A oneshot in boot-complete.target, which rauc-mark-good.service \
 requires: the slot is marked good only if the daemons came up. Once it is, the \
 slot's trial ends and U-Boot no longer falls back from it. See the scripts."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 # OS policy, not daemon code: its own recipe, so changing it does not rebuild the
 # daemon. microduck-daemon RDEPENDS on it -- the script asks the daemon's

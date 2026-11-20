@@ -3,8 +3,8 @@ DESCRIPTION = "Limits sshd.socket to the USB gadget's link (192.168.42.1 on \
 usb0). Creating /run/microduck-ssh-wifi as root (configd on an authenticated \
 BLE request, or sudo over USB) opens it on every interface until the next \
 reboot. Only for machines with microduck-usb-gadget: see microduck-image.bb."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = " \
     file://10-usb-only.conf \

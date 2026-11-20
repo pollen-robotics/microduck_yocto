@@ -1,5 +1,5 @@
 SUMMARY = "microduck robot OS"
-LICENSE = "MIT"
+LICENSE = "Apache-2.0"
 
 # The shipping image. Anything a robot must not carry, password-less root above
 # all, goes in microduck-image-dev.bb, which only ever adds to this one.
