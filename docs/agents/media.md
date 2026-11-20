@@ -70,6 +70,18 @@ Each of these builds and loads fine and fails only when a pipeline starts.
   dependency, so nothing noticed. Its `gstreamer` option puts the plugin in
   the libnice package (there is no `gstreamer1.0-nice` in meta-oe), and
   plugins-bad's `-webrtc` now RDEPENDS on libnice to say so.
+- **mpph264enc** (gstreamer-rockchip): two of our commits, merged upstream as
+  JeffyCN/mirrors#83 (df71354, bd16b2b), past meta-rockchip's c37e7cf pin. One
+  lets it offer `constrained-baseline`, without which webrtcsink's discovery
+  finds no codec and every session dies on not-negotiated. The other makes it
+  report its real level: it said 4.0 for everything, and with `42c028` on the
+  wire Firefox and Chrome showed nothing for 720p30 (level 3.1, browsers offer
+  `42e01f`) while a GStreamer client was fine (2026-09-16). The pinned tip
+  also brings 4b68d0f (pool of max-pending+1 buffers, so rkisp stops dropping
+  frames) and a `gpu` meson option we disable, so EGL in the sysroot cannot
+  change the plugin silently. Drop the bbappend once meta-rockchip's SRCREV
+  reaches ebc758a; until then recheck that its `SRC_URI` is still the one git
+  entry we replace.
 
 ## Why `PACKAGE_ARCH` comes before `inherit packagegroup`
 
