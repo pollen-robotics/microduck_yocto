@@ -339,16 +339,18 @@ save() {
 			&& printf '%s\n' "$sum" > /cache/sstate.current.part-"${JOB_ID:-nojobid}" \
 			&& mv -f /cache/sstate.current.part-"${JOB_ID:-nojobid}" /cache/sstate.current; then
 			echo "sstate: published at $(date -u +%T), sha256 $sum"
-			# Drop superseded archives (and the pre-pointer pair), but keep the one
-			# this job seeded from: another job started at the same time may still
-			# be reading it.
-			# shortcut: a job still reading an older archive than that loses it and
-			# reseeds; keep the last N if jobs ever run three at a time.
-			for old in /cache/sstate-*.tar /cache/sstate.tar /cache/sstate.tar.sha256; do
-				case "$old" in
-				/cache/sstate-"$sum".tar | /cache/sstate-"${seed_sum:-none}".tar) ;;
-				*) rm -f "$old" ;;
-				esac
+			# Drop an archive only once a newer one has existed for 30 min: a job
+			# that read the pointer just before may still be opening or unpacking
+			# it, and the mount shows other jobs' pointer up to ~30 s late.
+			# Deleting sooner cost 11 reseeds (2026-10-27..11-20, commit message).
+			rm -f /cache/sstate.tar /cache/sstate.tar.sha256
+			now=$(date +%s)
+			newer=
+			find /cache -maxdepth 1 -name 'sstate-*.tar' -printf '%T@ %p\n' | sort -rn | while read -r t old; do
+				if [ -n "$newer" ] && [ $((now - newer)) -gt 1800 ]; then
+					rm -f "$old"
+				fi
+				newer=${t%.*}
 			done
 		else
 			rm -f "$part" /cache/sstate.current.part-"${JOB_ID:-nojobid}"
@@ -401,7 +403,7 @@ if [ "$KAS_CMD" = build ]; then
 		else
 			return 1
 		fi
-		[ -f "$archive" ] || return 1
+		[ -f "$archive" ] || { echo "WARNING: $archive does not exist"; return 1; }
 		fifo=$HOME/sstate.fifo
 		rm -f "$fifo" && mkfifo "$fifo"
 		exec 3<>"$fifo"
