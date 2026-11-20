@@ -8,6 +8,10 @@ HOMEPAGE = "https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs"
 LICENSE = "MPL-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE-MPL-2.0;md5=815ca599c9df247a0c7f619bab123dad"
 
+# gstreamer-webrtc-1.0 and gstreamer-sdp-1.0 live in plugins-bad, which is also where
+# the webrtcbin element comes from -- see the bbappend enabling PACKAGECONFIG webrtc.
+DEPENDS += "gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-bad"
+
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 # Six repositories, and everything after the first is the difficulty of this recipe.
@@ -75,10 +79,6 @@ require ${BPN}-crates.inc
 # net/webrtc/Cargo.toml already carries [package.metadata.capi] with
 # install_subdir = "gstreamer-1.0", so cinstall lands the plugins in the right place.
 inherit cargo_c cargo-update-recipe-crates
-
-# gstreamer-webrtc-1.0 and gstreamer-sdp-1.0 live in plugins-bad, which is also where
-# the webrtcbin element comes from -- see the bbappend enabling PACKAGECONFIG webrtc.
-DEPENDS += "gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-bad"
 
 # Three of 65 workspace members. Building the whole repo would be hundreds of crates
 # of plugins nothing here needs. gst-plugin-rtp comes along because the webrtc
