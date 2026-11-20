@@ -16,3 +16,6 @@
 # Release-notes drafts and their PR cache (scripts/release_notes/).
 /.release-notes/
 __pycache__/
+
+# scripts/board-test.sh results
+/board-test-*/
