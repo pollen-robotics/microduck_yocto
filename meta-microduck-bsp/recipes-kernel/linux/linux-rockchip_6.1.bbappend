@@ -1,7 +1,7 @@
 # Rockchip vendor BSP 6.1 from Armbian's tree, carrying radxa's board description.
 #
 # armbian/linux-rockchip rk-6.1-rkr7.2 is Rockchip's rkr7.2 BSP kept merged with
-# 6.1 stable: 6.1.172 at this SRCREV, against 6.1.84 for the radxa/kernel
+# 6.1 stable: 6.1.172 at SRCREV (end of file), against 6.1.84 for the radxa/kernel
 # linux-6.1-stan-rkr4.1 tree this replaces. Two reasons to move:
 #   - CVE fixes: radxa's branch stopped at 6.1.84 (early 2024).
 #   - rkaiq rkr7 (the beta board's 3A engine, 6.0x32.0) needs a kernel newer than
@@ -29,7 +29,6 @@
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRCREV = "e97b8a3f30473ea345e0603a1390bb46fa7cc4f2"
 SRC_URI = " \
     git://github.com/armbian/linux-rockchip.git;protocol=https;nobranch=1;branch=rk-6.1-rkr7.2 \
     file://0000-rk3566-radxa-zero-3w-device-tree-from-radxa.patch \
@@ -207,6 +206,9 @@ SRC_URI:append:microduck-face-board-v1 = " \
     file://0006-leds-add-Awinic-AW21009-LED-driver.patch \
     file://microduck-face-board-v1.cfg \
 "
+
+# The pin the header describes; after every SRC_URI line, as oelint.var.order wants.
+SRCREV = "e97b8a3f30473ea345e0603a1390bb46fa7cc4f2"
 
 microduck_check_kernel_fragments() {
 	for frag in ${@' '.join(u.split('://')[1].split(';')[0] for u in d.getVar('SRC_URI').split() if u.startswith('file://microduck-') and u.endswith('.cfg'))}; do
