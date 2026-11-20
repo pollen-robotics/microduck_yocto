@@ -7,21 +7,13 @@ Bluetooth controller on UART1. Firmware is wq9201s-firmware."
 LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://debian/copyright;md5=3727876b7206ead678f0a134cddb542b"
 
-inherit module systemd
+inherit module systemd features_check
+REQUIRED_DISTRO_FEATURES = "wifi"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-# WuQi's WQ9201S SDK v2.2.3.94 as Seeed packages it, wq9201s-wifi-bt-dkms on the
-# deb_source branch of their public seeed_armbian_extension -- the same 183 source
-# files their factory image installs in /usr/src (compared blob for blob,
-# 2026-10-20). Fetched, not committed. wq9201s-bt-attach and its unit are ours,
-# reworked from Seeed's bt/ (GPL-2 there too).
-#
-# 0001: a failed roam within the ESS (wpa_supplicant reassociating to another
-# AP of the same SSID, the AP answering status 30) left cfg80211 believing it
-# was still connected, and wlan0 never reassociated until the module was
-# reloaded. Found on a beta board on 2026-10-27, reproduced on demand with
-# wpa_supplicant's D-Bus Roam(); the patch says why. Applies in ${S}.
+# The same sources as Seeed's factory image. The bt-attach script and unit are
+# ours, reworked from Seeed's bt/. Each patch says why.
 require seeed-deb-source.inc
 SRC_URI = " \
     ${SEEED_DEB_SOURCE} \
@@ -31,17 +23,13 @@ SRC_URI = " \
 "
 S = "${UNPACKDIR}/${BP}/wq9201s-wifi-bt-dkms"
 
-# Same shape as aic8800_5.0.bb: build in the driver's directory through kbuild.
-# The driver Makefile's own default target only wraps this with KERNELDIR and O=,
-# which a cross build sets differently.
+# As aic8800: kbuild directly, not the Makefile's KERNELDIR/O= wrapper.
 B = "${S}/src/wifi/rwnx_drv"
 MAKE_TARGETS = "-C ${STAGING_KERNEL_DIR} M=${B} modules"
 MODULES_INSTALL_TARGET = "-C ${STAGING_KERNEL_DIR} M=${B} modules_install"
 MODULES_MODULE_SYMVERS_LOCATION = "."
 
-# The Makefile builds with -Werror. WuQi and Seeed built with GCC 12 (Debian
-# bookworm); wrynose has GCC 15, whose new warnings would fail the build on code
-# that is fine. Dropped, and checked dropped.
+# -Werror under GCC 15 fails on code that GCC 12 (theirs) accepted.
 drop_werror() {
 	sed -i '/^ccflags-y += -Werror$/d' ${S}/src/wifi/rwnx_drv/Makefile
 	if grep -q -- '-Werror' ${S}/src/wifi/rwnx_drv/Makefile; then

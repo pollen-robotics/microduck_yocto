@@ -10,15 +10,8 @@ HOMEPAGE = "https://huggingface.co/pollen-robotics/microduck-duck-detector"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
-# microduck-policies is the same thing for robotd and carries the reasoning; this is
-# its pattern for the detector. Upstream, `scripts/seed-detector.sh` fills
-# /opt/robot/detector from `hooks/postinstall` -- which an image never runs, so
-# without this a freshly flashed robot has no model until its first update, and none
-# at all offline.
-#
-# The pin belongs to the daemon: DETECTOR_VERSION in its scripts/seed-detector.sh,
-# held against [workspace.metadata.detector] in its Cargo.toml.
-# The tag is "duck-v1"; PV is "v1" because a hyphen in PV breaks package versions.
+# The policy set's pattern (docs/agents/daemon-recipe.md, "Policy set"); PV is
+# the daemon's DETECTOR_VERSION without "duck-", since a hyphen breaks versions.
 DETECTOR_REPO = "pollen-robotics/microduck-duck-detector"
 DETECTOR_TAG = "duck-${PV}"
 

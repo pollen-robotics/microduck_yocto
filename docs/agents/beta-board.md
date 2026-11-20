@@ -190,7 +190,9 @@ mode talks to. Flashing goes through it, with `rkdeveloptool`.
 
    The `.wic` is sparse at 9.1 GiB (12.1 before the 2026-11-09 layout), and `wl`
    writes every byte of it, zeros
-   included, so expect minutes rather than seconds over USB 2.
+   included, so expect ~9 minutes over USB 2. `scripts/flash-emmc.sh` writes only
+   the ranges the `.wic.bmap` maps (~0.9 GiB, about a minute); see its
+   comment above `write_bmap` for why the unwritten rest is safe.
 
 ### A board stuck in maskrom
 

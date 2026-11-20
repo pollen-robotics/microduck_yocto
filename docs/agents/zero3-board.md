@@ -27,10 +27,21 @@ Radxa's fork (`radxa/u-boot` `next-dev-v2024.10`) is, despite the branch name,
 *also* 2017.09, and does carry `rk3566-radxa-zero3.dts` and
 `radxa-zero3-rk3566_defconfig` — so it is the fallback if the generic rk3568
 build cannot reach the kernel. It is not the default because meta-rockchip only
-tests the Miniloader path and radxa's defconfig is SPL+ATF.
+tests the Miniloader path and radxa's defconfig is SPL+ATF. Swapping means
+keeping the `rkbin` git entry, setting `RK_UBOOT_CFG` and `RK_UBOOT_SPL = "1"`;
+it boots via extlinux, so the chosen-node patch below becomes redundant.
 
-Two findings from reading those defconfigs, recorded in
-`conf/machine/microduck-zero3.conf`:
+**The kernel gets no cmdline from any source** with this U-Boot: no `bootargs`
+in its default env, an empty `boot.img` header cmdline, `CONFIG_CMDLINE` unset,
+and radxa's DTS deletes the `/chosen` node `rk3568-linux.dtsi` provides (their
+U-Boot gets bootargs from extlinux.conf). The first boot (2026-09-10) lit the
+LED, froze it off and wrote nothing to the card. `0001-*-restore-chosen-bootargs.patch`
+puts `root=PARTUUID` back in the DT, Rockchip's convention for this U-Boot.
+
+`KERNEL_DEVICETREE` names one DTB on purpose: with several, linux-rockchip.inc
+derives a boot.img per DTB but deploys one, so which it carries is ambiguous.
+
+Two findings from reading those defconfigs:
 
 - **No Rockchip defconfig sets `CONFIG_ENV_IS_IN_*`**, so out of the box this
   U-Boot has no persistent environment at all: the Kconfig choice falls to
@@ -69,6 +80,30 @@ Verified present in the rootfs (not merely in the manifest):
 
 `/lib -> usr/lib` (usrmerge), so the `/lib/firmware/...` path the driver's
 `fix-sdio-firmware-path.patch` sets does resolve.
+
+How the recipe builds it:
+
+- **Licences.** `debian/copyright` gives `src/*` (AICSemi's driver, what ships)
+  GPL-2 and radxa's packaging GPL-3+, so both are declared for the SBOM. Its
+  blanket `Files: *` also covers the firmware blobs, which are redistributable
+  binaries, not GPL: upstream's claim, not ours to correct.
+- **Kbuild.** The vendor Makefile is a plain kbuild fragment that never calls
+  the kernel build (DKMS passes `-C`/`M=`), so the recipe passes them through
+  `MAKE_TARGETS` and `MODULES_INSTALL_TARGET`.
+- **Patches: `debian/patches/series`, through quilt.** Not a `*.patch` glob: two
+  files there are deliberately left out of `series`. Not a `patch` loop: do_patch
+  re-runs after a recipe edit without re-unpacking, and quilt's `.pc/` makes that
+  a no-op. Line endings are normalised first, on source files only (never the
+  firmware): the drop mixes CRLF and LF, and `patch -l` does not save hunks like
+  `fix-usb-firmware-path.patch`'s. Rejects stay fatal, even for non-SDIO
+  patches, so we know whether an SDIO fix landed. The two that matter:
+  `fix-linux-6.1-build` and `fix-sdio-firmware-path`.
+- **Firmware: every chip variant**, as Debian's install file does. The board is
+  an AIC8800DS2 and no directory name obviously maps to it; the driver picks.
+- **`bt_test`** (dev image, `aic8800-bt-test`) is compiled by hand: its Makefile
+  hardcodes gcc and also builds `wifi_test`. It talks to the chip through the
+  vendor's own transports (`-s uart|usb|wlan`), which tells a hardware fault
+  from a stack fault.
 
 ## Bluetooth needs `hciattach`, not `btattach`
 

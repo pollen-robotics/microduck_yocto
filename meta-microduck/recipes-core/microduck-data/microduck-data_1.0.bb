@@ -18,7 +18,8 @@ SRC_URI = " \
     file://microduck-data-grow.service \
 "
 
-inherit systemd
+inherit systemd features_check
+REQUIRED_DISTRO_FEATURES = "systemd"
 
 # The unit name must be the mount point with / -> -.
 # microduck-journal-dir.service is not listed: the journal mount pulls it in.
@@ -48,12 +49,6 @@ do_install() {
 	install -d -m 2755 ${D}${localstatedir}/lib/robot/journal
 }
 
-# microduck-daemon ships /var/lib/robot itself; this adds two subdirectories.
-# microduck-data-grow: grows the data partition (sfdisk, partx, blockdev) and
-# then its ext4, online (resize2fs).
-RDEPENDS:${PN} += "microduck-daemon networkmanager \
-    util-linux-sfdisk util-linux-partx util-linux-blockdev e2fsprogs-resize2fs"
-
 FILES:${PN} = " \
     ${systemd_system_unitdir}/var-lib-robot.mount \
     ${systemd_system_unitdir}/var-lib-bluetooth.mount \
@@ -67,3 +62,9 @@ FILES:${PN} = " \
     ${localstatedir}/lib/robot/network \
     ${localstatedir}/lib/robot/journal \
 "
+
+# microduck-daemon ships /var/lib/robot itself; this adds two subdirectories.
+# microduck-data-grow: grows the data partition (sfdisk, partx, blockdev) and
+# then its ext4, online (resize2fs).
+RDEPENDS:${PN} += "microduck-daemon networkmanager \
+    util-linux-sfdisk util-linux-partx util-linux-blockdev e2fsprogs-resize2fs"

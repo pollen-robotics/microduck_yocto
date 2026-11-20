@@ -8,7 +8,8 @@
 # object per "job". Checks the archive protocol: a legacy sstate.tar pair is
 # read and replaced, the pointer is followed, superseded archives go, a corrupt
 # one is refused, and the archive a concurrent reader started from survives the
-# next publish -- the race that cost two 35-minute reseeds.
+# next publish -- the race that cost two 35-minute reseeds. A sixth job with
+# SAVE_SSTATE=0 must read the cache and leave it alone.
 set -u
 
 if [ ! -e /body.sh ]; then
@@ -24,7 +25,7 @@ fi
 mkdir -p /tmp/bin
 printf '#!/bin/sh\necho "$JOB_ID" > "$SSTATE_DIR/obj-$JOB_ID"\n' > /tmp/bin/kas
 chmod +x /tmp/bin/kas
-export PATH=/tmp/bin:$PATH KAS_CMD=build KAS_MACHINE=m KAS_TARGET=none HFJOB_BUCKET=b
+export PATH=/tmp/bin:$PATH KAS_CMD=build KAS_MACHINE=m KAS_TARGET=none HFJOB_BUCKET=b SAVE_SSTATE=1
 fail=0
 check() { if eval "$1"; then echo "ok   $2"; else echo "FAIL $2"; fail=1; fi; }
 job() { # $1 = job id; a fresh $HOME each time, like a new container
@@ -66,6 +67,11 @@ check 'grep -q "WARNING: /cache/sstate-.* != " /tmp/log-j4 && grep -q reseeding 
 before=$(cat /cache/sstate.current)
 job j5
 check '[ -f /cache/sstate-$before.tar ]' "a concurrent reader's archive survives the next publish"
+
+# 6. A branch job (SAVE_SSTATE=0) seeds from the cache but leaves it untouched.
+before=$(cat /cache/sstate.current) n=$(archives)
+SAVE_SSTATE=0 job j6
+check 'grep -q "sha256 verified" /tmp/log-j6 && [ "$(cat /cache/sstate.current)" = "$before" ] && [ "$(archives)" = "$n" ]' "SAVE_SSTATE=0 reads the cache and publishes nothing"
 
 [ "$fail" = 0 ] && echo "all passed" || echo "FAILED (logs: /tmp/log-j*)"
 exit "$fail"

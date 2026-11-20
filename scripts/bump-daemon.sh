@@ -34,8 +34,8 @@ EOF
 
 # The image seeds one policy set (microduck-policies_<v>.bb), and a release names
 # the one it needs in scripts/seed-policies.sh. A mismatch builds fine and gives a
-# robot that reports unhealthy and rolls back every update (the
-# microduck-policies recipe has the story), so refuse it before anything builds.
+# robot that reports unhealthy and rolls back every update
+# (docs/agents/daemon-recipe.md, "Policy set"), so refuse it before anything builds.
 needs=$(curl -fsSL "https://raw.githubusercontent.com/pollen-robotics/microduck_daemon/$srcrev/scripts/seed-policies.sh" \
 	| sed -n 's/^POLICY_VERSION="\${POLICY_VERSION:-\([^}]*\)}"$/\1/p') || needs=
 seeds=$(ls meta-microduck/recipes-microduck/microduck-policies/ | sed -n 's/^microduck-policies_\(.*\)\.bb$/\1/p')
