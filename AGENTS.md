@@ -112,6 +112,9 @@ Topics too long for this file, each a list of things that bite:
 - `docs/agents/daemon-recipe.md` — why each line of `microduck-daemon_*.bb`
   is there: the pin, the bmi088 git dep, users and groups, the release tree,
   the package splits, every runtime dependency. The recipe keeps only pointers.
+- `docs/agents/media.md` — the GStreamer plugins the image installs and how
+  to re-measure them, the MPP/RGA device permissions, the MPP encoders that
+  only exist on hardware.
 - `docs/agents/gst-tracers.md` — measuring the media pipeline (dev image): why
   `mediad` needs `RUST_LOG=gst=debug` and a WebRTC consumer before tracers say
   anything, why the CSV tracers never write from inside it, and the measured
@@ -287,7 +290,7 @@ new element (audio, an overlay, another encoder) still builds, and mediad then
 fails on the robot with "no element ...". Read the release's
 `ElementFactory::make` calls in `mediad/src`, and for anything new add its
 plugin's package to the packagegroup and its plugin name to the list in
-`scripts/qemu-test.sh`. The packagegroup's comment says how the list was
+`scripts/qemu-test.sh`. `docs/agents/media.md` says how the list was
 measured and how to measure it again.
 
 ## Commits
