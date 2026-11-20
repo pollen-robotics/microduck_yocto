@@ -1,43 +1,24 @@
 SUMMARY = "microduck robot OS"
 LICENSE = "MIT"
 
+# The shipping image. Anything a robot must not carry, password-less root above
+# all, goes in microduck-image-dev.bb, which only ever adds to this one.
 require recipes-core/images/core-image-base.bb
 
-# meta-rockchip: produces the .wic in deploy/.
 inherit rockchip-image extrausers
 
-# The operator account, the same as the Radxa images': microduck / microduck,
-# sudo with that password. Everything the daemon's tooling assumes defaults to
-# it -- duckctl ssh, scripts/dev-push.sh and provision-board.sh all log in as
-# `microduck@` and sudo from there. robot lets robotctl read the daemons'
-# sockets without root (scripts/install.sh adds its operator the same way);
-# audio, video, dialout and i2c are the devices a person debugging a duck pokes
-# at by hand. The hash is `openssl passwd -6 -salt microduckbeta microduck`,
-# fixed so the image stays reproducible; '$' is escaped for bitbake.
+# The operator account the daemon's tooling logs in as (duckctl ssh, dev-push.sh).
+# A shared password is acceptable only because ssh is on the head's USB-C link
+# alone. Fixed salt for reproducibility: `openssl passwd -6 -salt microduckbeta microduck`.
 MICRODUCK_OPERATOR_HASH = "\$6\$microduckbeta\$lxVesOQbjM8IXwxq5s/GpwW0KnK1YuspITBn7crCGbeuodZd.PBnJJIS5E32lQK4/mugkqFe36SAr6iyo82Gu0"
 EXTRA_USERS_PARAMS = "useradd -m -s /bin/bash -G robot,sudo,audio,video,dialout,i2c,plugdev,input -p '${MICRODUCK_OPERATOR_HASH}' microduck;"
-# Group sudo may sudo: recipes-extended/sudo/sudo_%.bbappend.
-# A shared password is acceptable only because ssh is reachable over the head's
-# USB-C link alone (microduck-ssh-access below): using it means opening the robot.
 
-# The card image to download and flash is the compressed .wic.zst plus its .bmap:
-# `bmaptool copy` writes only the blocks in use, instead of dd copying all 13 GB.
-# Plain `wic` stays in the list. oe-core deletes a type that is not listed as soon
-# as it has been converted (image.bbclass, rm_tmp_images), and a beta board's
-# eMMC is flashed from the plain .wic with `rkdeveloptool wl`
-# (docs/agents/beta-board.md). build-hfjob.sh leaves it out of the bucket instead.
-#
-# wic.zst.sha256sum is oe-core's sha256sum conversion: `sha256sum -c` on it
-# checks a download before it goes anywhere near a card. bmaptool checks the
-# data again while flashing, against the per-range sums in the .bmap.
+# Plain wic stays listed: oe-core deletes an unlisted type once converted, and
+# the beta's eMMC is flashed from the plain .wic.
 IMAGE_FSTYPES += "wic.zst wic.zst.sha256sum wic.bmap"
 
-# Two rockchip outputs nothing here uses, 14.5 GB per build between them:
-# - .ufs.wic, a second 13 GB copy with 4K sectors for UFS storage (we boot from SD)
-# - update.img, for Rockchip's own flashing tool (we use dd/bmaptool)
-# These are no-ops rather than an IMAGE_POSTPROCESS_COMMAND:remove, because
-# rockchip-image.bbclass appends them inside ";"-joined words such as
-# "do_image_wic_ufs;gen_rkparameter;", which :remove cannot match.
+# Rockchip's UFS copy and update.img, 14.5 GB nothing uses. No-ops because
+# rockchip-image.bbclass appends them in ";"-joined words :remove cannot match.
 do_image_wic_ufs() {
 	:
 }
@@ -45,13 +26,8 @@ gen_rkupdateimg() {
 	:
 }
 
-# Two more, for a different reason: their names are fixed, not per image.
-# - rootfs.img, a symlink to the image's ext4
-# - parameter, Rockchip's partition table for its flashing tool
-# CI builds microduck-image and microduck-image-dev in one job (the shipping and
-# dev bundles), and the second image's do_image_complete then fails: "trying to
-# install files into a shared area when those files already exist". Nothing here
-# reads either file; the wks takes idblock/uboot/boot by their own names.
+# Fixed names, not per image: building both images in one job fails the second
+# do_image_complete on them. Nothing reads them.
 link_rootfs_image() {
 	:
 }
@@ -59,12 +35,8 @@ gen_rkparameter() {
 	:
 }
 
-# The build id of the bundle that carries this image, as os-release's BUILD_ID.
-# RAUC records a slot's build only when it installs a bundle there, so a flashed
-# card had none and microduck-osupdate could only say "the flashed image".
-# It also replaces DISTRO_VERSION in os-release and the login banners, because
-# the release number is only chosen at promotion (microduck.conf).
-# microduck-image-dev.bb sets the dev bundle's id instead.
+# os-release's BUILD_ID, so a flashed card knows its build (RAUC records it only
+# on install). microduck-image-dev.bb sets the dev bundle's id instead.
 require recipes-core/images/microduck-build-id.inc
 MICRODUCK_BUILD_ID = "${MICRODUCK_SHIPPING_BUILD}"
 MICRODUCK_BUILD_ID[vardepsexclude] = "DATETIME"
@@ -75,8 +47,7 @@ microduck_build_id() {
 		[ -e "$f" ] || continue
 		sed -i "s/$v/${MICRODUCK_BUILD_ID}/g" "$f"
 	done
-	# os-release sanitises VERSION_ID (lowercase, '+' to '-'), so a DISTRO_VERSION
-	# the sed cannot match would leave a stale version: fail the build instead.
+	# os-release sanitises VERSION_ID, so the sed can miss: fail rather than lie.
 	grep -qx 'VERSION_ID=${MICRODUCK_BUILD_ID}' ${IMAGE_ROOTFS}${nonarch_libdir}/os-release \
 		|| bbfatal "os-release still names DISTRO_VERSION ${DISTRO_VERSION}, not build ${MICRODUCK_BUILD_ID}"
 	echo 'BUILD_ID="${MICRODUCK_BUILD_ID}"' >> ${IMAGE_ROOTFS}${nonarch_libdir}/os-release
@@ -84,37 +55,20 @@ microduck_build_id() {
 
 IMAGE_FEATURES += "ssh-server-openssh"
 
-# Only the GStreamer plugins mediad loads (packagegroup-microduck-media says how
-# they were measured). Each plugin set's main package RRECOMMENDS its -meta, which
-# RDEPENDS on every plugin of the set, so without this the image gets all ~190 back.
-# The dev image inherits it on purpose: a plugin missing here must fail on a dev
-# board first, not first on a shipped robot.
+# Only the GStreamer plugins mediad loads (packagegroup-microduck-media): each
+# set's -meta RDEPENDS on all ~190. The dev image keeps this so a gap shows there first.
 BAD_RECOMMENDATIONS += " \
     gstreamer1.0-plugins-base-meta \
     gstreamer1.0-plugins-good-meta \
     gstreamer1.0-plugins-bad-meta \
 "
 
-# ssh over the head's USB-C link only, and on wifi on request until reboot:
-# microduck-ssh-access. Only on a machine with the USB gadget, since without
-# usb0 it would leave no ssh at all. The Zero 3W has none and keeps ssh on
-# every interface: it is a stand-in board, never sold, whichever image it runs.
-# microduck-image-dev.bb reopens port 22 everywhere on every machine.
+# ssh on the head's USB-C link only; a machine without the gadget (Zero 3W)
+# would be left with no ssh at all.
 IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
 
-# Setuid and setgid only where something needs it. The image carried 16 setuid
-# binaries (2026-11-10), each one a way from any local process to root: shadow's
-# su, passwd, chage, chfn, chsh, expiry, gpasswd and newgrp, util-linux's mount
-# and umount, newuidmap/newgidmap, and busybox.suid (ping, traceroute, vlock).
-# Nothing on the robot runs them as a user: there is one operator account and it
-# has sudo, and no daemon, hook or unit calls any of them (checked). The binaries
-# stay; only the bit goes, for root they work as before.
-#
-# An allowlist, not a list to strip, so a package added later cannot bring a new
-# setuid binary in without someone reading this:
-#   sudo                        the operator's way to root
-#   unix_chkpwd                 PAM's password check, which sudo's PAM stack uses
-#   dbus-daemon-launch-helper   D-Bus system service activation
+# An allowlist, so a new package cannot bring a setuid binary in unread. No
+# user runs the others (one operator, with sudo); root keeps them, minus the bit.
 MICRODUCK_SETUID_ALLOWED = " \
     ${bindir}/sudo \
     ${sbindir}/unix_chkpwd \
@@ -131,6 +85,10 @@ microduck_setuid_allowlist() {
 	done
 }
 
+# padd: a shipping robot is driven with a gamepad.
+# alsa-utils-aplay: robotd plays every sound through `aplay`.
+# ldd: cargo-dist installers (rustypot-wizard's) read the glibc version with it.
+# MICRODUCK_RADIO_PACKAGES: per machine; BLE provisioning needs the attach unit.
 IMAGE_INSTALL:append = " \
     microduck-hardening \
     microduck-daemon \
@@ -155,50 +113,3 @@ IMAGE_INSTALL:append = " \
 
 # The beta's face LEDs, ToF and NFC reader, for the daemons' groups (robot, nfcd).
 IMAGE_INSTALL:append:microduck-beta = " microduck-face-leds microduck-tof-spidev microduck-nfc"
-
-# bluez5, iw, wpa-supplicant, wireless-regdb-static, usbutils: from packagegroup-base via MACHINE_FEATURES.
-# rauc would arrive via packagegroup-base too; listed to keep the updater visible.
-
-# u-boot-rockchip-env is /etc/fw_env.config and /etc/u-boot-initial-env, which
-# RAUC's uboot backend needs; the fw_printenv/fw_setenv it runs arrive through
-# meta-rauc's own RDEPENDS on u-boot-fw-utils. See recipes-bsp/u-boot/.
-
-# MICRODUCK_RADIO_PACKAGES is per machine (microduck-common.inc has the
-# default): the Zero 3W's is aic8800-bt, the beta board's wq9201s-bt.
-#
-# aic8800-bt is the HCI attach unit, in the shipping image rather than the dev
-# one: BLE is how a robot with no network gets provisioned (configd over btd), so
-# a controller that never attaches is a product fault, not a debug inconvenience.
-# The chip answers only through hciattach with the port speed set before the line
-# discipline attaches -- see the unit for the measurements that established that.
-
-# rustypot-wizard is the servo setup tool people reach for on a robot, and ldd
-# is what its cargo-dist installer (and every other cargo-dist installer) runs
-# to read the glibc version: without it the installer reports glibc "too old"
-# and finds no download for aarch64-unknown-linux-gnu. Seen on the beta board,
-# 2026-10-06.
-
-# alsa-utils-aplay is aplay and arecord, and the robot's voice depends on it:
-# robotd and sounds play every wav by running `aplay -D <device>` (robotd's
-# sound.rs), so without it a robot accepts `robotctl quack` and stays silent.
-# Found missing on the first beta board, 2026-10-05.
-
-# microduck-daemon-padd is installed here, not only in the dev image: a shipping
-# robot is driven with a gamepad, and without padd `robotctl health` reports it
-# stopped and a paired pad moves nothing.
-#
-# This recipe is the one that ships. Everything a robot must not carry -- a
-# password-less root login above all -- belongs in microduck-image-dev.bb, which
-# requires this file and only ever adds to it.
-
-# Notes on what is deliberately absent:
-#
-# - systemd-timesyncd: not a separate package. timesyncd is in oe-core
-#   systemd's default PACKAGECONFIG, so it ships with systemd. It still matters
-#   a lot -- this board has no battery-backed RTC, and updaterd's preflight
-#   check exists because a 1970 clock fails TLS with an opaque error. Verify
-#   with `timedatectl`, do not assume.
-#
-# - no *-dev packages, no build-essential, no gdb. Cross-compile against the
-#   SDK (`bitbake microduck-image -c populate_sdk`) instead of shipping headers
-#   to the robot.
