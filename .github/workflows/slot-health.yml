@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: scripts/test-slot-health.sh
       - run: TEST_SH=dash scripts/test-slot-health.sh
       - run: scripts/test-slot-trial.sh

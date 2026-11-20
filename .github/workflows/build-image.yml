@@ -112,9 +112,9 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -305,7 +305,7 @@ jobs:
       # No camera or mic in a VM: nothing private in this report.
       - name: Upload the QEMU report
         if: always() && steps.qemu.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: qemu-test-${{ matrix.machine }}
           path: board-test-127.0.0.1-*/

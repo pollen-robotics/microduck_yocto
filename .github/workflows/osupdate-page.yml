@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: node scripts/test-osupdate-page.mjs
       # The battery gate in the script, against fixed robotctl output. dash, like the
       # board's busybox sh: POSIX only.
