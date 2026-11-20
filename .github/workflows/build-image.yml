@@ -280,8 +280,8 @@ jobs:
           job="${{ steps.launch.outputs.job_id }}" machine="${{ matrix.machine }}"
           scripts/publish-os.sh "$job" "$machine" "$dev" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # The dev image: the shipping one refuses root over ssh.
-      - name: Test the image under QEMU
+      # Both bundles: shipping is what candidate publishes, read-only / included.
+      - name: Test the images under QEMU
         id: qemu
         if: success() && !inputs.target && (inputs.kas_command || 'build') == 'build'
         env:
@@ -292,14 +292,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq qemu-system-arm squashfs-tools e2fsprogs fdisk > /dev/null
           prefix="${{ steps.wait.outputs.artifacts }}"
-          bundle=$(hf buckets ls "$prefix/" | awk '{print $NF}' \
-            | grep -E "/microduck-bundle-$MACHINE-[0-9]+\.raucb\$" | head -1)
-          test -n "$bundle" || { echo "no dev bundle for $MACHINE in $prefix"; exit 1; }
-          hf buckets cp "hf://buckets/pollen-robotics/microduck-yocto-cache/$bundle" "$RUNNER_TEMP/"
           rc=0
-          scripts/qemu-board-test.sh "$RUNNER_TEMP/${bundle##*/}" | tee "$RUNNER_TEMP/qemu.txt" || rc=$?
-          { echo "### QEMU test"; echo '```'; grep -E '^\[(FAIL|SKIP)\]|passed,' "$RUNNER_TEMP/qemu.txt"; echo '```'; } \
-            >> "$GITHUB_STEP_SUMMARY" || true
+          for kind in "" shipping-; do
+            bundle=$(hf buckets ls "$prefix/" | awk '{print $NF}' \
+              | grep -E "/microduck-bundle-$kind$MACHINE-[0-9]+\.raucb\$" | head -1)
+            test -n "$bundle" || { echo "no ${kind:-dev-}bundle for $MACHINE in $prefix"; rc=1; continue; }
+            hf buckets cp "hf://buckets/pollen-robotics/microduck-yocto-cache/$bundle" "$RUNNER_TEMP/"
+            scripts/qemu-board-test.sh "$RUNNER_TEMP/${bundle##*/}" | tee "$RUNNER_TEMP/qemu.txt" || rc=1
+            { echo "### QEMU test, ${kind:-dev-}bundle"; echo '```'; grep -E '^\[(FAIL|SKIP)\]|passed,' "$RUNNER_TEMP/qemu.txt"; echo '```'; } \
+              >> "$GITHUB_STEP_SUMMARY" || true
+          done
           exit $rc
 
       # No camera or mic in a VM: nothing private in this report.
