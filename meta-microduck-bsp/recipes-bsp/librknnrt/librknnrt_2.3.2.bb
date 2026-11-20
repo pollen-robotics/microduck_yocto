@@ -6,20 +6,14 @@ detector works, slower and warmer. The kernel half is the rknpu driver, built in
 the vendor kernel and enabled in the beta device tree."
 HOMEPAGE = "https://github.com/airockchip/rknn-toolkit2"
 
-# Rockchip's own terms, not an open-source licence: "All rights reserved", as-is,
-# no warranty, and no explicit redistribution clause. Rockchip publishes the binary
-# itself in the public repo above, which is what every Rockchip distro ships.
+# Not open source, and no explicit redistribution clause; Rockchip publishes
+# the binary itself, as every Rockchip distro ships it.
 LICENSE = "Rockchip-RKNN"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=a2399e2538b7ebeac89b5b1cc648459a"
 NO_GENERIC_LICENSE[Rockchip-RKNN] = "LICENSE"
 
-# Version: the tag in rknn-toolkit2, which must be at least as new as the toolkit
-# that converted the model ("a runtime older than its model fails at rknn_init with
-# a number"). Keep it in step with microduck_daemon's
-# [workspace.metadata.rknpu] runtime pin and scripts/setup-npu.sh's RUNTIME.
-#
-# Two files, not the repo: rknn-toolkit2 carries Python wheels for every release
-# and is far too big to clone for one .so.
+# PV: at least the toolkit that converted the model, in step with the daemon's
+# [workspace.metadata.rknpu] pin. Two files, not the repo: it holds every wheel.
 RKNN_TAG = "v${PV}"
 RKNN_RAW = "https://raw.githubusercontent.com/airockchip/rknn-toolkit2/${RKNN_TAG}"
 SRC_URI = " \
@@ -31,11 +25,9 @@ SRC_URI[license.sha256sum] = "d846f57d942c7dfdca7b8b54f9e8bb39e1e226790dc4f5ee20
 
 S = "${UNPACKDIR}"
 
-# An aarch64 binary drop.
 COMPATIBLE_HOST = "aarch64.*-linux"
 
-# Prebuilt: no configure/compile. Our do_install replaces the class's, which
-# copies ${S} as-is and ${S} also holds the LICENSE.
+# Our do_install replaces the class's: ${S} also holds the LICENSE.
 inherit bin_package
 
 do_install() {
