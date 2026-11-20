@@ -27,10 +27,21 @@ Radxa's fork (`radxa/u-boot` `next-dev-v2024.10`) is, despite the branch name,
 *also* 2017.09, and does carry `rk3566-radxa-zero3.dts` and
 `radxa-zero3-rk3566_defconfig` — so it is the fallback if the generic rk3568
 build cannot reach the kernel. It is not the default because meta-rockchip only
-tests the Miniloader path and radxa's defconfig is SPL+ATF.
+tests the Miniloader path and radxa's defconfig is SPL+ATF. Swapping means
+keeping the `rkbin` git entry, setting `RK_UBOOT_CFG` and `RK_UBOOT_SPL = "1"`;
+it boots via extlinux, so the chosen-node patch below becomes redundant.
 
-Two findings from reading those defconfigs, recorded in
-`conf/machine/microduck-zero3.conf`:
+**The kernel gets no cmdline from any source** with this U-Boot: no `bootargs`
+in its default env, an empty `boot.img` header cmdline, `CONFIG_CMDLINE` unset,
+and radxa's DTS deletes the `/chosen` node `rk3568-linux.dtsi` provides (their
+U-Boot gets bootargs from extlinux.conf). The first boot (2026-09-10) lit the
+LED, froze it off and wrote nothing to the card. `0001-*-restore-chosen-bootargs.patch`
+puts `root=PARTUUID` back in the DT, Rockchip's convention for this U-Boot.
+
+`KERNEL_DEVICETREE` names one DTB on purpose: with several, linux-rockchip.inc
+derives a boot.img per DTB but deploys one, so which it carries is ambiguous.
+
+Two findings from reading those defconfigs:
 
 - **No Rockchip defconfig sets `CONFIG_ENV_IS_IN_*`**, so out of the box this
   U-Boot has no persistent environment at all: the Kconfig choice falls to
