@@ -293,6 +293,14 @@ plugin's package to the packagegroup and its plugin name to the list in
 `scripts/qemu-test.sh`. `docs/agents/media.md` says how the list was
 measured and how to measure it again.
 
+## Comments
+
+Default: no comment. Add one only for the *why* a reader would otherwise
+"fix", in one to three lines, in recipes, confs and scripts alike. Never what
+the next line does. Investigations, measurements and history go in the commit message or
+`docs/agents/`, and the comment points there. When touching a recipe, trim its
+long comments in the same change.
+
 ## Commits
 
 Per the workspace convention, no `Co-Authored-By:`. Use a single
