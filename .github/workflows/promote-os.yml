@@ -62,16 +62,18 @@ jobs:
     environment: production
     timeout-minutes: 45
     # contents: write is for the release; nothing else writes to the repository.
+    # actions: read is for the QEMU warning.
     permissions:
       contents: write
+      actions: read
     defaults:
       run:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -121,7 +123,7 @@ jobs:
               manifest "$m" "$b" m.env
               if [ "$(field COMMIT m.env)" = "$COMMIT" ]; then build=$b; break; fi
             done
-            [ -n "$build" ] || { echo "$m has no candidate built from $COMMIT"; exit 1; }
+            [ -n "$build" ] || { echo "$m has no candidate built from $COMMIT: its build may have failed the QEMU test (see build-image runs); pass \`commit\` to release an older one"; exit 1; }
             mkdir "$m" && mv m.env "$m/manifest.env"
             [ "$(field COMPATIBLE "$m/manifest.env")" = "$m" ] \
               || { echo "$m: manifest is for '$(field COMPATIBLE "$m/manifest.env")'"; exit 1; }
@@ -159,6 +161,30 @@ jobs:
             echo "$m: candidate $build, job $job"
           done
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
+      # A newer build that failed its QEMU test is no candidate, so this release is older. Warn only.
+      - name: Warn about newer builds that failed their QEMU test
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.fetch.outputs.commit }}
+        run: |
+          set -eu
+          runs=$(gh run list -R "$GITHUB_REPOSITORY" -w build-image.yml -b main -L 50 \
+            --json databaseId,headSha,createdAt,status,url)
+          built=$(jq -r --arg c "$COMMIT" '[.[] | select(.headSha == $c)][0].createdAt // empty' <<< "$runs")
+          [ -n "$built" ] || { echo "::warning::no build-image run on main found for $COMMIT"; exit 0; }
+          jq -r --arg t "$built" '.[] | select(.createdAt > $t and .status == "completed")
+              | "\(.databaseId) \(.headSha) \(.url)"' <<< "$runs" |
+            while read -r id sha url; do
+              failed=$(gh run view "$id" -R "$GITHUB_REPOSITORY" --json jobs --jq '.jobs[]
+                  | select(any(.steps[]?; (.name | startswith("Test the image")) and .conclusion == "failure"))
+                  | .name' | paste -sd, -)
+              [ -n "$failed" ] || continue
+              msg="newer build ${sha:0:7} failed its QEMU test ($failed), so it is not a candidate; releasing the older ${COMMIT:0:7}. $url"
+              echo "::warning::$msg"
+              echo "- :warning: $msg" >> "$GITHUB_STEP_SUMMARY"
+            done
 
       # microduck-os-v<X.Y.Z>: the highest release bumped. A re-run after a failure
       # further down finds its own release already made (its notes name the first

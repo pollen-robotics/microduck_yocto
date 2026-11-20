@@ -112,9 +112,9 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -255,8 +255,11 @@ jobs:
       # production key -- robots in the field must never follow a dev-signed image.
       # Both bundles here are dev-signed, so a production board refuses either.
       #
+      # dev is published before the QEMU test, candidate only after it passes.
+      #
       # A release does not publish; it attaches its images instead (the step above).
-      - name: Publish for OS updates
+      - name: Publish to dev
+        id: channels
         if: >-
           success() && !inputs.target
           && (inputs.kas_command || 'build') == 'build'
@@ -273,10 +276,52 @@ jobs:
             dev=dev-$(printf '%s' "$slug" | cut -c1-36)
             candidate=candidate-$(printf '%s' "$slug" | cut -c1-30)
           fi
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
           job="${{ steps.launch.outputs.job_id }}" machine="${{ matrix.machine }}"
           scripts/publish-os.sh "$job" "$machine" "$dev" | tee -a "$GITHUB_STEP_SUMMARY"
-          BUNDLE=microduck-bundle-shipping scripts/publish-os.sh "$job" "$machine" "$candidate" \
-            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Both bundles: shipping is what candidate publishes, read-only / included.
+      - name: Test the images under QEMU
+        id: qemu
+        if: success() && !inputs.target && (inputs.kas_command || 'build') == 'build'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          MACHINE: ${{ matrix.machine }}
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm squashfs-tools e2fsprogs fdisk > /dev/null
+          prefix="${{ steps.wait.outputs.artifacts }}"
+          rc=0
+          for kind in "" shipping-; do
+            bundle=$(hf buckets ls "$prefix/" | awk '{print $NF}' \
+              | grep -E "/microduck-bundle-$kind$MACHINE-[0-9]+\.raucb\$" | head -1)
+            test -n "$bundle" || { echo "no ${kind:-dev-}bundle for $MACHINE in $prefix"; rc=1; continue; }
+            hf buckets cp "hf://buckets/pollen-robotics/microduck-yocto-cache/$bundle" "$RUNNER_TEMP/"
+            scripts/qemu-board-test.sh "$RUNNER_TEMP/${bundle##*/}" | tee "$RUNNER_TEMP/qemu.txt" || rc=1
+            { echo "### QEMU test, ${kind:-dev-}bundle"; echo '```'; grep -E '^\[(FAIL|SKIP)\]|passed,' "$RUNNER_TEMP/qemu.txt"; echo '```'; } \
+              >> "$GITHUB_STEP_SUMMARY" || true
+          done
+          exit $rc
+
+      # No camera or mic in a VM: nothing private in this report.
+      - name: Upload the QEMU report
+        if: always() && steps.qemu.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: qemu-test-${{ matrix.machine }}
+          path: board-test-127.0.0.1-*/
+          if-no-files-found: warn
+
+      - name: Publish to candidate
+        if: success() && steps.channels.outputs.candidate != ''
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -eu
+          job="${{ steps.launch.outputs.job_id }}" machine="${{ matrix.machine }}"
+          BUNDLE=microduck-bundle-shipping scripts/publish-os.sh "$job" "$machine" \
+            "${{ steps.channels.outputs.candidate }}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Retention. Nothing reads deploy/<job>/ except a person fetching a card
       # image or a bundle. A folder goes only if it is BOTH older than KEEP_DAYS
@@ -287,9 +332,9 @@ jobs:
       # is the one `hf buckets ls` prints for it (date and time, so they sort).
       #
       # Non-fatal. A prune that fails must not turn a good build red, but it
-      # warns.
+      # warns. A red QEMU test still prunes.
       - name: Prune old artifacts
-        if: success()
+        if: ${{ !cancelled() && steps.wait.outcome == 'success' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           KEEP_DAYS: 14

@@ -286,6 +286,52 @@ under `qemu-system-aarch64 -M virt -cpu max`, which catches systemd ordering and
 network bring-up problems. U-Boot, the device tree, the radios and the motor bus
 need hardware.
 
+### Testing an image on a board
+
+Install the build on a board (`rauc install`), then, from this repository:
+
+```sh
+scripts/board-test.sh <ip>                  # dev image: root, no password
+scripts/board-test.sh 192.168.42.1 microduck # shipping image over USB-C; asks for sudo's password
+```
+
+It runs the image's functional tests (`tests/cukinia/`, with
+[cukinia](https://github.com/savoirfairelinux/cukinia) 0.9.1, fetched once and
+checked against its hash). It installs nothing in the image. The tests cover
+services, GStreamer plugins and ONNX Runtime, then the hardware the image drives:
+the servos and IMU board (through `robotctl health`), the head IMU, NFC, live ToF
+frames, the EEPROM, the camera, the fan, and the speaker and mic. The script exits 1
+if any test fails. It takes about 30 s, and the host needs `ssh` (the board in
+`known_hosts`), `curl` and `python3`.
+
+`--motion` (first argument) adds a physical test, only when asked for: the robot
+stands up, looks left, right and ahead, opens and closes its mouth, walks about
+20 cm forward and back, sits, and rests with its motors off. Each step is checked
+against robotd's own state (policy, measured joints, odometry, the fall flag,
+motor currents), not the command's answer. **The robot moves**: put it on the
+floor with 50 cm clear around it, with no pad connected and autonomous mode off
+(the script refuses to start otherwise).
+
+While it runs, the robot plays a soft 500 Hz tone for 2 s, spins its fan at full
+speed, and lights its face flashlight for the camera capture (switched off after,
+even if it was on before). It needs something within about 4 m of the ToF.
+
+It leaves `board-test-<host>-<time>/index.html`: one page with every result, the
+camera frame, the mic recording to listen to, the ToF depth map and
+`robotctl health`, for a tester to look at. The folder holds a photo and a
+recording of the room. It is git-ignored, so share it on purpose, never by commit.
+
+Without a board, `scripts/qemu-board-test.sh <microduck-bundle-*.raucb>` boots a
+build's bundle, dev or shipping, under QEMU (`apt install qemu-system-arm
+squashfs-tools`), on a GPT disk laid out as a board's (rootfs_a, rootfs_b, data),
+and runs the same tests: the system suite only, since the hardware checks need a
+board. On the shipping bundle that includes its read-only `/`. About 40 s, no root.
+
+To add a test, add a line to `tests/cukinia/cukinia.conf` (cukinia's statements
+are in its README). Put a hardware check inside the `if on_board` block. If a
+check needs more than one line, put it in a script in `tests/cukinia/hw/` that
+prints one line: the report drops newlines.
+
 ## Contributing
 
 Read [`AGENTS.md`](AGENTS.md) first: it is the working notes for this repository,
@@ -296,7 +342,9 @@ already cost a build. Before opening a pull request:
 - `oelint-adv` is clean (CI runs it; the command is in `AGENTS.md`);
 - after touching the partition layout, `scripts/check-wks-layout.py` says
   `layout ok`;
-- after touching U-Boot's boot script, `scripts/test-uboot-bootcmd.sh` passes.
+- after touching U-Boot's boot script, `scripts/test-uboot-bootcmd.sh` passes;
+- after changing what the image installs or runs, `scripts/board-test.sh` passes
+  on a board.
 
 Report security issues privately, as [`SECURITY.md`](SECURITY.md) describes.
 
