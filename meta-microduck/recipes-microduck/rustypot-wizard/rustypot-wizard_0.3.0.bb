@@ -28,6 +28,3 @@ do_install() {
 	install -d ${D}${bindir}
 	install -m 0755 ${S}/rustypot_wizard ${D}${bindir}/rustypot_wizard
 }
-
-# Prebuilt: linked by its own toolchain, not with this build's LDFLAGS.
-INSANE_SKIP:${PN} += "ldflags"

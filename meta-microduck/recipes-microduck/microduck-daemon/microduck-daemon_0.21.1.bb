@@ -26,14 +26,14 @@ DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ssh;branch=main;name=daemon \
+SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ssh;branch=onnx-version-stamp;name=daemon \
            git://github.com/pollen-robotics/bmi088-rs;protocol=https;nobranch=1;name=bmi088;destsuffix=bmi088-rs \
            file://60-robot-i2c.rules \
            file://robotctl.bash_completion \
            file://microduck-voice-bank.service \
 "
 # A release's source_revision, never main: set by scripts/bump-daemon.sh.
-SRCREV_daemon = "094d4bb4af31ec181156e1ea772437fdd7a55978"
+SRCREV_daemon = "4b002cbea62413041a9952d52acf8c3078e84cb6"
 # The commit under the v0.1.2 tag, not the tag object. name= must be the crate name.
 SRCREV_bmi088 = "bd113f317b14923f50f9a12a06678fe162b7fe06"
 SRCREV_FORMAT = "daemon_bmi088"
