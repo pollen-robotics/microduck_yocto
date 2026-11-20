@@ -6,11 +6,10 @@
 #
 #   scripts/build-local.sh
 #
-# Note there is no `poky` repo here. The combined poky repo has no wrynose
-# branch (it stops at walnascar), so we use the three repos meta-rockchip's
-# README actually names: openembedded-core, meta-yocto and meta-openembedded.
-# bitbake is a fourth, checked out as a sibling of openembedded-core, which is
-# where oe-buildenv-internal's `$OEROOT/../bitbake` fallback finds it.
+# Note there is no `poky` repo here: the microduck distro stands on
+# openembedded-core alone, plus meta-openembedded. bitbake is checked out as a
+# sibling of openembedded-core, which is where oe-buildenv-internal's
+# `$OEROOT/../bitbake` fallback finds it.
 
 header:
   version: 14
@@ -54,14 +53,6 @@ repos:
     layers:
       # Not a layer -- oe-core requires bitbake >= 2.18.0 and locates it by path.
       .: disabled
-
-  meta-yocto:
-    url: https://git.yoctoproject.org/meta-yocto
-    branch: wrynose
-    commit: 79b6d87030178bed0088ad3b00aa6dfbabac37c4
-    layers:
-      meta-poky:
-      meta-yocto-bsp: disabled
 
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded

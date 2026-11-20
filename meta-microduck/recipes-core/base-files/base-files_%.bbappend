@@ -1,5 +1,3 @@
-# files/microduck/motd beats meta-poky's "for testing only" one: `microduck`
-# comes after `poky` in DISTROOVERRIDES, so it wins in any layer order.
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 # Grow / to fill its slot at boot: `rauc install` writes the ext4 at image size,
