@@ -7,7 +7,7 @@ radxa's U-Boot, which passes a cmdline from extlinux.conf, and wrong for
 meta-rockchip's rk3568_defconfig U-Boot, which boots the Android boot.img
 with an empty header cmdline.
 
-Recreate the node with rw rootwait, console=ttyFIQ0 for bring-up serial and
+Recreate the node with ro rootwait, console=ttyFIQ0 for bring-up serial and
 console=tty0 for HDMI. earlycon is deliberately left out: it targets UART2,
 the motor bus.
 
@@ -21,7 +21,7 @@ Upstream-Status: Inappropriate [configuration]
 
 --- a/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
 +++ b/arch/arm64/boot/dts/rockchip/rk3566-radxa-zero-3w-aic8800ds2.dts
-@@ -12,6 +12,33 @@
+@@ -12,6 +12,34 @@
  / {
  	model = "Radxa ZERO 3";
  	compatible = "radxa,zero3w-aic8800ds2", "radxa,zero3", "rockchip,rk3566";
@@ -32,7 +32,8 @@ Upstream-Status: Inappropriate [configuration]
 +	 * passes them from extlinux.conf. meta-rockchip's U-Boot does not, so the
 +	 * node is recreated with what we need:
 +	 *
-+	 *   rw rootwait      no initramfs; wait for the SD card to enumerate
++	 *   ro rootwait      no initramfs; wait for the SD card to enumerate; the
++	 *                    dev image's fstab remounts / read-write
 +	 *   console=ttyFIQ0  serial during bring-up; when MICRODUCK_MOTOR_UART=1
 +	 *                    disables the FIQ debugger the device never registers
 +	 *                    and nothing is printed on the Dynamixel wire
@@ -50,7 +51,7 @@ Upstream-Status: Inappropriate [configuration]
 +	 * bypasses the FIQ switch.
 +	 */
 +	chosen {
-+		bootargs = "rw rootwait console=ttyFIQ0 console=tty0";
++		bootargs = "ro rootwait console=ttyFIQ0 console=tty0";
 +	};
 
  	wireless_wlan: wireless-wlan {

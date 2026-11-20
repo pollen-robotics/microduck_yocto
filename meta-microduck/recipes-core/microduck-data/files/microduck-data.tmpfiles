@@ -5,3 +5,6 @@ d /var/lib/robot/network 0700 root root -
 # BlueZ's bonds, bind-mounted over /var/lib/bluetooth (var-lib-bluetooth.mount).
 # 0700 like BlueZ's own StateDirectoryMode: the files hold link keys.
 d /var/lib/robot/bluetooth 0700 root root -
+# timesyncd's clock file, bind-mounted over /var/lib/systemd/timesync
+# (var-lib-systemd-timesync.mount). Its StateDirectory= fixes the owner.
+d /var/lib/robot/timesync 0755 root root -
