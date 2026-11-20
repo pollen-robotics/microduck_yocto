@@ -24,12 +24,12 @@ RAUC_BUNDLE_FORMAT = "verity"
 # its own kernel and an update can change it.
 RAUC_BUNDLE_SLOTS = "rootfs"
 
+# Fetching anything (the hook below) makes do_populate_lic demand a checksum;
+# bundle.bbclass only sets LICENSE ?= "MIT". Same line as the microduck-data recipe.
+LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
 # The hook refuses a card whose U-Boot still boots the `boot` partition: there a
 # new kernel in the slot would never run, against its own modules. See the hook.
 SRC_URI = "file://microduck-bundle-hook"
-# Fetching anything makes do_populate_lic demand a checksum; bundle.bbclass only
-# sets LICENSE ?= "MIT". Same line as the microduck-data recipe.
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
 RAUC_BUNDLE_HOOKS[file] = "microduck-bundle-hook"
 RAUC_BUNDLE_HOOKS[hooks] = "install-check"
 
