@@ -24,12 +24,13 @@ REQUIRED_DISTRO_FEATURES = "wifi"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-# Tag 5.0+git20260123.5f7be68d-7. radxa-pkg wraps AICSemi's vendor drop in Debian
-# packaging; we reuse their patches and build rules but not dpkg/DKMS.
-SRCREV = "6e076049b719ac2ff7ce5c92786a680407b11cdb"
+# radxa-pkg wraps AICSemi's vendor drop in Debian packaging; we reuse their
+# patches and build rules but not dpkg/DKMS.
 SRC_URI = "git://github.com/radxa-pkg/aic8800.git;protocol=https;nobranch=1 \
            file://aic8800-bt-attach.service \
 "
+# Tag 5.0+git20260123.5f7be68d-7.
+SRCREV = "6e076049b719ac2ff7ce5c92786a680407b11cdb"
 
 # No `S =` line on purpose. wrynose actively rejects S = "${WORKDIR}/git" and
 # S = "${UNPACKDIR}/git" with a do_unpack error: the git fetcher now unpacks to
@@ -123,10 +124,6 @@ SYSTEMD_PACKAGES = "${PN}-bt"
 SYSTEMD_SERVICE:${PN}-bt = "aic8800-bt-attach.service"
 SYSTEMD_AUTO_ENABLE:${PN}-bt = "enable"
 
-# hciattach and hciconfig come from bluez5; nothing else is needed, since the
-# rfkill handling is done through sysfs rather than the rfkill tool.
-RDEPENDS:${PN}-bt += "bluez5"
-
 # bt_test: AICSemi's own BT bring-up and diagnostic tool, from the same source
 # tree. Debian ships it as the `aicrf-test` package -- debian/aicrf-test.install
 # is one line, `src/tools/aicrf_test/bt_test usr/bin/`.
@@ -160,6 +157,10 @@ PACKAGES =+ "${PN}-firmware ${PN}-bt ${PN}-bt-test"
 FILES:${PN}-firmware = "${FW_SUBDIR}"
 FILES:${PN}-bt = "${systemd_system_unitdir}/aic8800-bt-attach.service"
 FILES:${PN}-bt-test = "${bindir}/bt_test"
+
+# hciattach and hciconfig come from bluez5; nothing else is needed, since the
+# rfkill handling is done through sysfs rather than the rfkill tool.
+RDEPENDS:${PN}-bt += "bluez5"
 
 # The modules are useless without the blobs, and the SDIO device probes at boot.
 RDEPENDS:${PN} += "${PN}-firmware"
