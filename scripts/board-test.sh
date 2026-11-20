@@ -1,9 +1,10 @@
 #!/bin/bash
 # Run the image's functional tests (tests/cukinia) on a board, over ssh.
 #
-#   scripts/board-test.sh <host> [user]
+#   scripts/board-test.sh [--motion] <host> [user]
 #
 # user: root (dev image), or microduck with sudo (shipping image, USB-C).
+# --motion also runs scripts/board-motion.py: the robot MOVES.
 # Results and index.html land in ./board-test-<host>-<time>/; exits 1 on a failure.
 # BOARD_SSH_OPTS is added to every ssh call.
 set -euo pipefail
@@ -11,7 +12,12 @@ set -euo pipefail
 # shellcheck disable=SC2086,SC2029 # options split on purpose; callers expand locally
 rsh() { ssh ${BOARD_SSH_OPTS:-} "$@"; }
 
-host=${1:?usage: $0 <host> [user]}
+motion=
+if [ "${1:-}" = --motion ]; then
+	motion=1
+	shift
+fi
+host=${1:?usage: $0 [--motion] <host> [user]}
 user=${2:-root}
 here=$(cd "$(dirname "$0")/.." && pwd)
 
@@ -50,5 +56,8 @@ rsh "$user@$host" "tar -C $remote/out -cf - . && rm -rf $remote" | tar -C "$out"
 # shellcheck disable=SC2086
 { echo '{"jsonrpc":"2.0","id":1,"method":"tof.stream"}'; sleep 4; } |
 	timeout 8 ssh ${BOARD_SSH_OPTS:-} -W /run/tofd/tof.sock "$user@$host" > "$out/tof.jsonl" 2>/dev/null || true
+if [ -n "$motion" ]; then
+	python3 "$here/scripts/board-motion.py" "$user@$host" "$out" || rc=1
+fi
 python3 "$here/scripts/board-report.py" "$out" || rc=1
 exit $rc
