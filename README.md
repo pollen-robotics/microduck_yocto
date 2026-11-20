@@ -304,6 +304,14 @@ frames, the EEPROM, the camera, the fan, and the speaker and mic. The script exi
 if any test fails. It takes about 30 s, and the host needs `ssh` (the board in
 `known_hosts`), `curl` and `python3`.
 
+`--motion` (first argument) adds a physical test, only when asked for: the robot
+stands up, looks left, right and ahead, opens and closes its mouth, walks about
+20 cm forward and back, sits, and rests with its motors off. Each step is checked
+against robotd's own state (policy, measured joints, odometry, the fall flag,
+motor currents), not the command's answer. **The robot moves**: put it on the
+floor with 50 cm clear around it, with no pad connected and autonomous mode off
+(the script refuses to start otherwise).
+
 While it runs, the robot plays a soft 500 Hz tone for 2 s, spins its fan at full
 speed, and lights its face flashlight for the camera capture (switched off after,
 even if it was on before). It needs something within about 4 m of the ToF.
