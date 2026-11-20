@@ -1,6 +1,9 @@
 # Host keys on the data partition: per slot, every OS update changed the robot's
 # key, which teaches people to clear the warning that catches impersonation.
 OPENSSH_HOST_KEY_DIR:microduck = "${localstatedir}/lib/robot/ssh"
+# The read-only image runs sshd_config_readonly (read_only_rootfs_hook), whose
+# default key dir is in /run: a new key every boot.
+OPENSSH_HOST_KEY_DIR_READONLY_CONFIG:microduck = "${OPENSSH_HOST_KEY_DIR}"
 
 FILESEXTRAPATHS:prepend:microduck := "${THISDIR}/files:"
 SRC_URI:append:microduck = " file://sshdgenkeys-data.conf"
