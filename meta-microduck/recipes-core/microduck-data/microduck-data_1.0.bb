@@ -3,8 +3,8 @@ DESCRIPTION = "Mounts the data partition where the daemon keeps what a user adds
 and keeps NetworkManager's wifi profiles there too, so both survive a RAUC slot \
 switch. Also holds the systemd journal, so logs survive power cuts and \
 rollbacks, and BlueZ's bonds, so a paired gamepad survives an update."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = " \
     file://var-lib-robot.mount \
