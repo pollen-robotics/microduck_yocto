@@ -2,13 +2,15 @@ SUMMARY = "Persistent data partition at /var/lib/robot"
 DESCRIPTION = "Mounts the data partition where the daemon keeps what a user adds, \
 and keeps NetworkManager's wifi profiles there too, so both survive a RAUC slot \
 switch. Also holds the systemd journal, so logs survive power cuts and \
-rollbacks, and BlueZ's bonds, so a paired gamepad survives an update."
+rollbacks, BlueZ's bonds, so a paired gamepad survives an update, and \
+timesyncd's clock file."
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = " \
     file://var-lib-robot.mount \
     file://var-lib-bluetooth.mount \
+    file://var-lib-systemd-timesync.mount \
     file://90-microduck-keyfile.conf \
     file://microduck-data.tmpfiles \
     file://var-volatile-log-journal.mount \
@@ -24,7 +26,8 @@ REQUIRED_DISTRO_FEATURES = "systemd"
 
 # The unit name must be the mount point with / -> -.
 # microduck-journal-dir.service is not listed: the journal mount pulls it in.
-# Nor is var-lib-bluetooth.mount: bluetooth.service's StateDirectory= pulls it in.
+# Nor are var-lib-bluetooth.mount and var-lib-systemd-timesync.mount: their
+# services' StateDirectory= pulls them in.
 SYSTEMD_SERVICE:${PN} = "var-lib-robot.mount var-volatile-log-journal.mount microduck-data-grow.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
@@ -32,6 +35,7 @@ do_install() {
 	install -d ${D}${systemd_system_unitdir}
 	install -m 0644 ${UNPACKDIR}/var-lib-robot.mount ${D}${systemd_system_unitdir}/
 	install -m 0644 ${UNPACKDIR}/var-lib-bluetooth.mount ${D}${systemd_system_unitdir}/
+	install -m 0644 ${UNPACKDIR}/var-lib-systemd-timesync.mount ${D}${systemd_system_unitdir}/
 	install -m 0644 ${UNPACKDIR}/var-volatile-log-journal.mount ${D}${systemd_system_unitdir}/
 	install -m 0644 ${UNPACKDIR}/microduck-journal-dir.service ${D}${systemd_system_unitdir}/
 	install -m 0644 ${UNPACKDIR}/microduck-data-grow.service ${D}${systemd_system_unitdir}/
@@ -53,6 +57,7 @@ do_install() {
 FILES:${PN} = " \
     ${systemd_system_unitdir}/var-lib-robot.mount \
     ${systemd_system_unitdir}/var-lib-bluetooth.mount \
+    ${systemd_system_unitdir}/var-lib-systemd-timesync.mount \
     ${systemd_system_unitdir}/var-volatile-log-journal.mount \
     ${systemd_system_unitdir}/microduck-journal-dir.service \
     ${systemd_system_unitdir}/microduck-data-grow.service \

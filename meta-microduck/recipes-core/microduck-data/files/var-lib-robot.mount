@@ -7,6 +7,9 @@ Description=Persistent robot data (policies, sounds, config, wifi profiles)
 # Requires= and they run on the rootfs directories. by-label exists only once blkid
 # finds the filesystem, so one path checks "present" and "formatted".
 ConditionPathExists=/dev/disk/by-label/data
+# On the read-only rootfs volatile-binds lays a tmpfs overlay over /var/lib,
+# which would hide this mount if it came first. Skipped on a rw rootfs.
+After=var-volatile-lib.service
 
 [Mount]
 What=/dev/disk/by-partlabel/data
