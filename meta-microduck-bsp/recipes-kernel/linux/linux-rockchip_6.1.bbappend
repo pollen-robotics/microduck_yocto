@@ -10,6 +10,7 @@ SRC_URI = " \
     file://radxa-rockchip-linux.kconfig \
     file://cgroups.cfg \
     file://mali-csf.cfg \
+    file://no-bcmdhd.cfg \
     file://no-mali400.cfg \
     file://no-mali-gpu.cfg \
     file://qemu-virt.cfg \
