@@ -3,10 +3,14 @@
 # netstat on the image, so /proc/net). Measured on face-board-v1, 2026-11-19:
 # 22 ssh, 8090 update page (LAN on dev only), 9443 duck-gateway, udp 67 the USB-C
 # DHCP server, 68/546 DHCP clients. Client UDP ports (>= 32768) are skipped.
-# PROC_NET is for scripts/test-ports.sh. Prints one line.
+# The shipping image (read-only / in fstab) keeps the update page on loopback.
+# PROC_NET and FSTAB are for scripts/test-ports.sh. Prints one line.
 set -eu
 ALLOWED="tcp:22 tcp:8090 tcp:9443 udp:67 udp:68 udp:546"
 net=${PROC_NET:-/proc/net}
+if awk '$2 == "/" && $4 ~ /(^|,)ro(,|$)/ { f = 1 } END { exit !f }' "${FSTAB:-/etc/fstab}"; then
+	ALLOWED="tcp:22 tcp:9443 udp:67 udp:68 udp:546"
+fi
 
 # "<proto> <hex addr>:<hex port>": TCP in LISTEN (0A), unconnected UDP (07).
 listening() {
