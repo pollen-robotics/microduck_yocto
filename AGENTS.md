@@ -299,8 +299,8 @@ fails on the robot with "no element ...". Read the release's
 `ElementFactory::make` calls in `mediad/src`, and for anything new add its
 plugin's package to the packagegroup and its plugin name to the list in
 `tests/cukinia/cukinia.conf`. `docs/agents/media.md` says how the list was
-measured and how to measure it again. `scripts/qemu-board-test.sh` checks it
-on a build's bundle; run `scripts/board-test.sh` on a board too (README, "Testing an image on
+measured and how to measure it again. CI then checks it under QEMU on every
+build; run `scripts/board-test.sh` on a board too (README, "Testing an image on
 a board").
 
 ## Comments
