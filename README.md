@@ -321,6 +321,11 @@ camera frame, the mic recording to listen to, the ToF depth map and
 `robotctl health`, for a tester to look at. The folder holds a photo and a
 recording of the room. It is git-ignored, so share it on purpose, never by commit.
 
+Without a board, `scripts/qemu-board-test.sh <microduck-bundle-*.raucb>` boots a
+build's dev bundle under QEMU (`apt install qemu-system-arm squashfs-tools`), on a
+GPT disk laid out as a board's (rootfs_a, rootfs_b, data), and runs the same tests:
+the system suite only, since the hardware checks need a board. About 40 s, no root.
+
 To add a test, add a line to `tests/cukinia/cukinia.conf` (cukinia's statements
 are in its README). Put a hardware check inside the `if on_board` block. If a
 check needs more than one line, put it in a script in `tests/cukinia/hw/` that

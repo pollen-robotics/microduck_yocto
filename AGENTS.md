@@ -298,8 +298,10 @@ new element (audio, an overlay, another encoder) still builds, and mediad then
 fails on the robot with "no element ...". Read the release's
 `ElementFactory::make` calls in `mediad/src`, and for anything new add its
 plugin's package to the packagegroup and its plugin name to the list in
-`scripts/qemu-test.sh`. `docs/agents/media.md` says how the list was
-measured and how to measure it again.
+`tests/cukinia/cukinia.conf`. `docs/agents/media.md` says how the list was
+measured and how to measure it again. `scripts/qemu-board-test.sh` checks it
+on a build's bundle; run `scripts/board-test.sh` on a board too (README, "Testing an image on
+a board").
 
 ## Comments
 

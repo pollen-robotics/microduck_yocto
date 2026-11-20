@@ -6,7 +6,7 @@
 # user: root (dev image), or microduck with sudo (shipping image, USB-C).
 # --motion also runs scripts/board-motion.py: the robot MOVES.
 # Results and index.html land in ./board-test-<host>-<time>/; exits 1 on a failure.
-# BOARD_SSH_OPTS is added to every ssh call.
+# BOARD_SSH_OPTS is added to every ssh call (qemu-board-test.sh's port and host key).
 set -euo pipefail
 
 # shellcheck disable=SC2086,SC2029 # options split on purpose; callers expand locally
