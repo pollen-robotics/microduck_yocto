@@ -9,6 +9,7 @@ SRC_URI = " \
     file://0001-rk3566-radxa-zero-3w-restore-chosen-bootargs.patch \
     file://radxa-rockchip-linux.kconfig \
     file://cgroups.cfg \
+    file://microduck-gamepads.cfg \
     file://mali-csf.cfg \
     file://no-mali400.cfg \
     file://no-mali-gpu.cfg \
