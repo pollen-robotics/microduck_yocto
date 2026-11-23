@@ -7,9 +7,9 @@
 # adapter-wide, so a spoofed bonded gamepad could re-pair: accepted, low risk.
 #
 # UserspaceHID = false: a classic pad's reports go through the kernel's hidp, not
-# bluetoothd. In hid-nintendo's full mode (gamepads.cfg) the Pro Controller
-# clones stream their IMU, which cost bluetoothd ~16 % CPU through uhid on
-# graphite. LE pads are unaffected: HID over GATT stays bluetoothd's.
+# bluetoothd. In hid-nintendo's full mode (microduck-gamepads.cfg) Switch-compatible
+# pads stream their IMU, which cost bluetoothd ~16 % CPU through uhid on graphite.
+# LE pads are unaffected: HID over GATT stays bluetoothd's.
 do_install:append:microduck() {
 	conf=${D}${sysconfdir}/bluetooth/main.conf
 	sed -i 's/^\[GATT\]$/[GATT]\nClient = false/' "$conf"
