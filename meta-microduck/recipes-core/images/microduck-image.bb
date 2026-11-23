@@ -135,7 +135,6 @@ microduck_setuid_allowlist() {
 # ldd: cargo-dist installers (rustypot-wizard's) read the glibc version with it.
 # MICRODUCK_RADIO_PACKAGES: per machine; BLE provisioning needs the attach unit.
 IMAGE_INSTALL:append = " \
-    microduck-hardening \
     microduck-daemon \
     microduck-daemon-padd \
     microduck-board \
@@ -143,11 +142,16 @@ IMAGE_INSTALL:append = " \
     ldd \
     rustypot-wizard \
     sudo \
-    kernel-modules \
     ${MICRODUCK_RADIO_PACKAGES} \
     i2c-tools \
     htop \
 "
+
+# Not all 750 modules of radxa's defconfig (40 MB): what the robot needs is built in.
+# These two are all a running board loads besides its wifi driver (fq_codel is
+# systemd's default qdisc); a module that is not installed cannot be loaded at all.
+BAD_RECOMMENDATIONS += "kernel-modules"
+IMAGE_INSTALL:append = " kernel-module-sch-fq-codel kernel-module-nfnetlink"
 
 # The beta's face LEDs, ToF and NFC reader, for the daemons' groups (robot, nfcd).
 IMAGE_INSTALL:append:microduck-beta = " microduck-face-leds microduck-tof-spidev microduck-nfc"
