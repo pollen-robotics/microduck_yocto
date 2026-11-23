@@ -13,6 +13,7 @@ SRC_URI = " \
     file://no-mali400.cfg \
     file://no-mali-gpu.cfg \
     file://qemu-virt.cfg \
+    file://microduck-readonly-rootfs.cfg \
     file://rauc.cfg \
     file://watchdog.cfg \
 "
