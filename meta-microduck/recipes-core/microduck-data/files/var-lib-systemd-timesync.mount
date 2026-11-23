@@ -1,0 +1,17 @@
+[Unit]
+Description=Persistent timesyncd clock on the data partition
+
+# With no RTC, the clock file's time is the floor the clock starts from at boot.
+# On the read-only rootfs /var/lib is RAM, so it would fall back to the build's.
+#
+# No [Install]: timesyncd's StateDirectory= pulls this in, as with
+# var-lib-bluetooth.mount, whose comments say why nofail and the condition.
+RequiresMountsFor=/var/lib/robot
+After=systemd-tmpfiles-setup.service
+ConditionPathIsDirectory=/var/lib/robot/timesync
+
+[Mount]
+What=/var/lib/robot/timesync
+Where=/var/lib/systemd/timesync
+Type=none
+Options=bind,nofail

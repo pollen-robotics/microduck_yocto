@@ -370,8 +370,73 @@ library root, so nothing crosses a filesystem boundary.
   there too. Without it RAUC keeps per-slot status that a slot rewrite erases.
 
 `/opt/robot/daemon` stays **on the rootfs** on purpose: it is core, replaced by
-the image, reseeded on flash. A slot switch reverts the daemon to the image's
-seed and `updaterd` converges it again — test that deliberately once stage 2 exists.
+the image, reseeded on flash. On the dev image a slot switch reverts the daemon
+to the image's seed and `updaterd` converges it again. On the shipping image the
+daemon is the image's and nothing else (next section).
+
+## Read-only rootfs (shipping image)
+
+The shipping image's `/` is ext4 mounted read-only; the dev image's is not.
+Not squashfs: U-Boot 2017.09 cannot read it, and it loads the kernel from the
+slot. The slot type stays ext4, so it ships as an ordinary bundle.
+
+- **`ro` is on the cmdline**, in `/chosen/bootargs` of both DTS files. U-Boot
+  merges `/chosen` from the DTB it boots (`bootargs_add_dtb_dtbo(fdt)` in
+  `arch/arm/mach-rockchip/board.c`), which is the slot's own, so a bundle carries
+  the change and U-Boot needs none. The dev image's fstab says `defaults`, so
+  `systemd-remount-fs` makes its `/` read-write early in boot; the shipping
+  fstab says `ro` (oe-core's `read_only_rootfs_hook`).
+- **Daemon, policy and detector sets come with the OS only.** A daemon release's
+  `hooks/postinstall` writes units into `/etc/systemd/system` and `sysusers.d`
+  into `/usr/lib`, fatally, so on a read-only `/` every `updaterd` apply would
+  roll back. The shipping `updater.toml` pins the daemon to the image's version,
+  drops `check_interval` and sets `auto_apply = "off"`
+  (`microduck_read_only_rootfs` in `microduck-image.bb`). Decided 2026-11-20: a
+  shipping robot updates through RAUC; whoever wants another daemon needs root,
+  and with it can remount `/` read-write.
+- **What is written, and where:**
+  | what | where |
+  |---|---|
+  | journal, wifi profiles, BlueZ bonds, ssh host keys, RAUC state, robot config | data, as before |
+  | timesyncd's clock file (the clock's floor at boot, no RTC) | data: `var-lib-systemd-timesync.mount` |
+  | the rest of `/var/lib` (NetworkManager state and leases, random seed) | RAM: oe-core's `volatile-binds` overlays it with a tmpfs when it is read-only |
+  | `/etc/resolv.conf` | a link to NetworkManager's in `/run` (`man-resolv-conf`) |
+  | `/etc/machine-id` | committed once per flashed slot (below) |
+  | RAUC's slot and bundle mounts | `/run/rauc` (`mountprefix`; `/mnt/rauc` cannot be created) |
+- **`var-lib-robot.mount` is ordered after `var-volatile-lib.service`.** The
+  tmpfs overlay on `/var/lib` would hide the data partition if it came second.
+- **ssh keeps its key on data.** `read_only_rootfs_hook` switches sshd to
+  `sshd_config_readonly`, whose host keys default to `/var/run/ssh`, a new key
+  every boot. `openssh_%.bbappend` points it at the data directory too.
+- **machine-id.** An installed slot gets the running one from the bundle hook,
+  as before. A flashed slot has oe-core's empty file, so systemd makes a
+  transient id on a read-only `/`, and a new journal directory every boot. A
+  drop-in on `systemd-machine-id-commit.service` remounts `/` read-write for
+  the commit and back. Still open: a fresh card's slot B, booted by a `switch`
+  with no install, commits an id of its own (as it did before).
+- **`x-systemd.growfs` is dropped** from the shipping fstab: it cannot grow a
+  read-only `/`, and with no daemon installs nothing needs the room.
+- **The dev image cannot catch any of this**: its `/` is writable. Test read-only
+  work by installing a **candidate** bundle on a board.
+
+Verified on hardware 2026-11-20 (face-board-v1, `duck-583a`, build
+`20261120152915`, installed into A from the dev image in B): `ro` in
+`/proc/cmdline` and on `/`; no failed units; slot-health passed and
+`BOOT_ORDER=A`; HTTPS to huggingface.co (the shipping image has no `getent`, use
+`curl`); NTP synced; `/var/lib` an overlay of 16 KiB in RAM, with data,
+bluetooth and timesync bound over it; the hook's `machine-id`, the ssh host key
+and the journal the same across two boots; `machine-id-commit` skipped (an
+installed slot); no remount of `/` besides `systemd-remount-fs`'s ro one;
+`robotctl update check` says "component is pinned to 0.21.1"; `robotctl
+health` healthy. Expected noise: tmpfiles cannot create `/root/.ssh`.
+Power cut (off button, USB-C unplugged): the RK809 came back at 2017-08-04 and
+timesyncd "advanced to recorded timestamp" 16:03:08 from the clock file on
+data, before NTP answered; same `machine-id` and host key, no failed units.
+Fresh flash of the shipping card (same build, `wl 0` over the whole eMMC): the
+first boot committed the transient id (`systemd-machine-id-commit` ran the
+drop-in, status 0); the next boot kept it and skipped the unit
+("ConditionPathIsMountPoint=/etc/machine-id was not met"), so `/` is not
+remounted rw again; one journal directory, both boots listed; no failed units.
 
 **A RAUC-written slot's filesystem is the image's size, not the slot's.** `rauc
 install` writes the bundle's ext4 raw into the 4 GiB slot. The image is ~740 MB with
@@ -381,7 +446,7 @@ flashed slot A got 4 GiB, from wic's `--fixed-size`. The root line of fstab
 carries `x-systemd.growfs` (`recipes-core/base-files`). systemd-fstab-generator
 turns that into `systemd-growfs-root.service`, which grows `/` online at boot; on
 the board it took 69 ms. Do not "fix" this with `IMAGE_ROOTFS_SIZE`: every bundle
-would then carry 4 GiB.
+would then carry 4 GiB. Dev image only since the shipping image's `/` went read-only.
 
 ## Fallback only on trial
 
@@ -459,7 +524,8 @@ Each of those reboots spends an attempt, so a slot on trial that never reaches
   (2026-09-25)**: a writable U-Boot environment
   (`recipes-bsp/u-boot/files/rauc-env.cfg`) plus `/etc/fw_env.config` and
   U-Boot's default env as `/etc/u-boot-initial-env`, both installed by oe-core's
-  `u-boot.inc` into `u-boot-rockchip-env`; `fw_printenv`/`fw_setenv` arrive via
+  `u-boot.inc` into `u-boot-rockchip-env` (an RDEPENDS of our `rauc-conf`, by
+  its RPROVIDES `u-boot-default-env`); `fw_printenv`/`fw_setenv` arrive via
   meta-rauc's own RDEPENDS. The proof is that **U-Boot reads what Linux
   writes**, not merely that Linux reads back its own write: `fw_setenv bootargs
   microduck.envprobe=1`, reboot, and the token led `/proc/cmdline`. `bootargs` is

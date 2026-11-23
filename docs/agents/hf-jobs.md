@@ -96,9 +96,8 @@ kernel fragment or a new layer is a cold-ish build, 50–80 min.
 
 ## Secrets
 
-The only two things that travel to the job as secrets are the SSH deploy key
-(`HFJOB_SSH_KEY`, base64) and the RAUC signing key (automatic, bundle targets
-only). Both via `-s`. Nothing else may be baked in — a credential in an image
+The only thing that travels to the job as a secret is the RAUC signing key
+(automatic, bundle targets only), via `-s`. Every source fetch is anonymous. Nothing else may be baked in — a credential in an image
 cannot be rotated without reflashing every robot.
 
 ## Running it from an agent

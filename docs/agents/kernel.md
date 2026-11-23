@@ -41,7 +41,43 @@ Never trust the effective config from the defconfig name: read `${B}/.config`
 after `do_configure`. `mali-csf.cfg` exists because a SoC override everyone
 assumed was applied never was. `microduck_check_kernel_fragments` fails the
 build when a line of a `microduck-*.cfg` fragment did not survive merge_config
-(a missing dependency drops it silently: a face board with no LEDs).
+(a missing dependency drops it silently: a face board with no LEDs), and when
+one of its `# ... is not set` lines came back on through another option's `select`.
+
+## The trim
+
+Radxa's defconfig builds in drivers for every board radxa sells. The
+`microduck-trim-*.cfg` fragments turn off, one area each, what no microduck has:
+debug and test options, foreign and network filesystems, touchscreens and USB
+serial chips, Ethernet/CAN/modems, PCIe/SATA/NVMe/UFS/MTD storage, and KVM.
+`-display` and `-media` (other sensors, audio codecs, all of the display side)
+go on the beta family only: the Zero 3W has HDMI and an IMX219.
+
+Kept on purpose: `CONFIG_DRM` (the NPU is a DRM GEM device, `/dev/dri/card0` is
+RKNPU), `CONFIG_PCI` (the QEMU test boots on virtio-pci), and the CP210x, FTDI,
+CH341 and PL2303 USB serial drivers (Dynamixel and debug dongles).
+
+**Turning an option off also turns off what it alone selected.** Radxa's
+defconfig is a minimal one, and kernel-yocto merges it with the fragments in one
+`alldefconfig` pass, so anything that was on only through a `select` goes with its
+selector. `CONFIG_USB` itself is not in the defconfig: it was on through the USB
+touchscreen's select, and the first trim build failed in `wq_wlan`'s modpost
+(`usb_alloc_urb` undefined). `microduck-trim-keep.cfg` restores each such option
+that matters, and says which selector it lost. Out-of-tree modules (`wq_wlan`,
+`aic8800`) cannot select anything, so what they link against must be on by name.
+
+To try a fragment in seconds rather than in an hour's build: unpack the kernel's
+`gitshallow_*linux-rockchip*` tarball from `downloads/`, then run
+`scripts/kconfig/merge_config.sh` (no `-m`) over the defconfig file and the
+fragments in SRC_URI order, with `ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-`.
+That is kernel-yocto's own pass, and gives the board's `/proc/config.gz` apart
+from the toolchain lines. Do not `make microduck_defconfig` first: the expanded
+`.config` records every selected option by name and hides exactly the losses above.
+Then compare the `=y`/`=m` sets before and after the trim, and build
+`wq_wlan` against the result (`make M=<rwnx_drv> modules`).
+
+No module is installed apart from the image's short list
+(`microduck-image.bb`), so an option left at `=m` costs build time, not image size.
 
 ## No auto-patches
 

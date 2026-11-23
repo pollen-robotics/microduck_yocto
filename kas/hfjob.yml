@@ -48,6 +48,9 @@ local_conf_header:
     # - git: MIRRORNAME expands to host.path with / turned into dots, which is
     #   exactly how DL_DIR/git2/ names its bare clones
     #   (bitbake lib/bb/fetch2/__init__.py, at the pinned commit).
+    # - Shallow git (BB_GIT_SHALLOW: the kernel, glibc, binutils) has no git2 clone,
+    #   only a gitshallow_*.tar.gz in downloads/. The file:// line finds it; first,
+    #   or the git2 attempt warns "Fast shallow clone failed" and refetches upstream.
     # - Everything else is checksummed, so the mirror path becomes the file's name
     #   in DL_DIR. That covers the 1700 .crate files, which sit flat in downloads/.
     #
@@ -63,6 +66,7 @@ local_conf_header:
     # hour (kas/hfjob.env). This only reads, which is what the old bulk copy did
     # too, but if a kernel rebuild ever hangs in do_fetch, look here first.
     PREMIRRORS:prepend = "\
+        git://.*/.* file:///cache/downloads/ \
         git://.*/.* git:///cache/downloads/git2/MIRRORNAME;protocol=file \
         gitsm://.*/.* gitsm:///cache/downloads/git2/MIRRORNAME;protocol=file \
         crate://.*/.* file:///cache/downloads/ \

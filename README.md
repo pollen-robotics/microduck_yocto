@@ -139,10 +139,6 @@ scripts/build-local.sh shell                             # a bitbake shell
 KAS_FILES=kas/microduck.yml:kas/beta.yml scripts/build-local.sh   # the beta board
 ```
 
-The daemon recipe fetches its repository over SSH, so the build needs an
-`ssh-agent` holding a key registered with GitHub, and `KAS_SSH_DIR` pointing at a
-directory with a `known_hosts` that trusts github.com.
-
 Paths are environment variables rather than `local.conf` entries because
 `kas-container` bind-mounts `KAS_BUILD_DIR`, `DL_DIR` and `SSTATE_DIR` into the
 container; a path in `local.conf` would name a host directory the container
@@ -223,10 +219,10 @@ docs/flashing.md         flashing a robot's eMMC, for the factory
 docs/agents/             deep notes, each a list of things that bite
 ```
 
-The upstream layers are `openembedded-core`, `bitbake`, `meta-yocto`,
-`meta-openembedded`, `meta-rockchip` and `meta-rauc`, all on Yocto 6.0
-**wrynose** (LTS to April 2030). There is no `poky` repo: it has no wrynose
-branch, so the three repos it combines are checked out separately.
+The upstream layers are `openembedded-core`, `bitbake`, `meta-openembedded`,
+`meta-rockchip` and `meta-rauc`, all on Yocto 6.0 **wrynose** (LTS to April
+2030). There is no `poky`: the `microduck` distro is its own, on oe-core's
+defaults.
 
 The partition layout is `meta-microduck-bsp/files/wic/microduck-ab.wks.in`. Its
 first 16 MiB follow Rockchip's documented table, because vendor code writes to

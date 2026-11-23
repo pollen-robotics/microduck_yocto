@@ -1,7 +1,7 @@
 SUMMARY = "microduck robot OS -- dev image"
 DESCRIPTION = "microduck-image plus what a developer needs and a robot must not \
-ship. A strict superset: it adds, never substitutes, so anything verified on a \
-dev board holds for the shipping image too."
+ship. A superset but for one thing: its / is read-write. So anything verified on \
+a dev board holds for the shipping image too, except writing to /."
 
 require recipes-core/images/microduck-image.bb
 
@@ -9,6 +9,10 @@ require recipes-core/images/microduck-image.bb
 # a login must be in the image. oelint flags these in any image; only here.
 # nooelint: oelint.var.badimagefeature
 IMAGE_FEATURES += "allow-empty-password allow-root-login empty-root-password"
+
+# The one subtraction: / stays read-write, so a developer can edit it and
+# updaterd can still install daemon releases. Test read-only work on a candidate.
+IMAGE_FEATURES:remove = "read-only-rootfs"
 
 # ssh on every interface: microduck-ssh-access's own wifi reset, made permanent.
 ROOTFS_POSTPROCESS_COMMAND += "sshd_any_interface"

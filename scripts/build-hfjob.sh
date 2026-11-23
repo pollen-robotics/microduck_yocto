@@ -22,14 +22,7 @@
 # cpu-performance. Estimated 2.5-4 h cold, 15-35 min once the bucket is warm.
 # --timeout is a ceiling that stops the billing, not a reservation.
 #
-# The private microduck-daemon fetch needs a key, and there is no ssh-agent to
-# forward into a job the way build-local.sh does. Pass one explicitly -- and
-# prefer a read-only deploy key over your own, because it is held server-side
-# (encrypted) for the life of the job:
-#
-#   HFJOB_SSH_KEY=~/.ssh/microduck_daemon_deploy scripts/build-hfjob.sh
-#
-# Without a key, anything fetching only public sources still builds. Start with
+# Start with
 #
 #   scripts/build-hfjob.sh linux-rockchip
 #
@@ -151,12 +144,6 @@ if [ -n "${HFJOB_TASK:-}" ]; then
 fi
 if [ -n "$KAS_EXTRA" ]; then
 	set -- "$@" -e "KAS_EXTRA=$KAS_EXTRA"
-fi
-if [ -n "${HFJOB_SSH_KEY:-}" ]; then
-	# base64, because $(cat key) strips the trailing newline that OpenSSH requires
-	# on an ed25519 key -- which cost a build: kas picked the secret up, piped it to
-	# `ssh-add -`, and got "Error loading key "(stdin)": error in libcrypto".
-	set -- "$@" -s "SSH_PRIVATE_KEY_B64=$(base64 -w0 "$HFJOB_SSH_KEY")"
 fi
 
 # The signing pair, split deliberately: -s for the private key so hf treats it as
@@ -352,16 +339,18 @@ save() {
 			&& printf '%s\n' "$sum" > /cache/sstate.current.part-"${JOB_ID:-nojobid}" \
 			&& mv -f /cache/sstate.current.part-"${JOB_ID:-nojobid}" /cache/sstate.current; then
 			echo "sstate: published at $(date -u +%T), sha256 $sum"
-			# Drop superseded archives (and the pre-pointer pair), but keep the one
-			# this job seeded from: another job started at the same time may still
-			# be reading it.
-			# shortcut: a job still reading an older archive than that loses it and
-			# reseeds; keep the last N if jobs ever run three at a time.
-			for old in /cache/sstate-*.tar /cache/sstate.tar /cache/sstate.tar.sha256; do
-				case "$old" in
-				/cache/sstate-"$sum".tar | /cache/sstate-"${seed_sum:-none}".tar) ;;
-				*) rm -f "$old" ;;
-				esac
+			# Drop an archive only once a newer one has existed for 30 min: a job
+			# that read the pointer just before may still be opening or unpacking
+			# it, and the mount shows other jobs' pointer up to ~30 s late.
+			# Deleting sooner cost 11 reseeds (2026-10-27..11-20, commit message).
+			rm -f /cache/sstate.tar /cache/sstate.tar.sha256
+			now=$(date +%s)
+			newer=
+			find /cache -maxdepth 1 -name 'sstate-*.tar' -printf '%T@ %p\n' | sort -rn | while read -r t old; do
+				if [ -n "$newer" ] && [ $((now - newer)) -gt 1800 ]; then
+					rm -f "$old"
+				fi
+				newer=${t%.*}
 			done
 		else
 			rm -f "$part" /cache/sstate.current.part-"${JOB_ID:-nojobid}"
@@ -414,7 +403,7 @@ if [ "$KAS_CMD" = build ]; then
 		else
 			return 1
 		fi
-		[ -f "$archive" ] || return 1
+		[ -f "$archive" ] || { echo "WARNING: $archive does not exist"; return 1; }
 		fifo=$HOME/sstate.fifo
 		rm -f "$fifo" && mkfifo "$fifo"
 		exec 3<>"$fifo"
@@ -461,58 +450,6 @@ fi
 git init -q .
 git add -A
 git -c user.email=hfjob@pollen-robotics.com -c user.name=hfjob commit -q -m snapshot
-
-if [ -n "${SSH_PRIVATE_KEY_B64:-}" ]; then
-	umask 077
-	mkdir -p ~/.ssh
-	# id_ed25519 is a filename ssh tries by default, so this works even if the
-	# agent below is somehow not consulted.
-	printf %s "$SSH_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/id_ed25519
-	# Guarantee the trailing newline. base64 round-trips it faithfully, but a key
-	# that arrives without one is rejected by ssh-add with an opaque libcrypto
-	# error rather than anything mentioning newlines. An if, not `test && echo`:
-	# under set -e the latter exits the script whenever the test is false, which
-	# here is the normal case.
-	if [ -n "$(tail -c1 ~/.ssh/id_ed25519)" ]; then
-		echo >> ~/.ssh/id_ed25519
-	fi
-	chmod 600 ~/.ssh/id_ed25519
-
-	# known_hosts is not optional: ssh refuses before authenticating when it
-	# cannot verify the host, which surfaces as the misleading "Could not read
-	# from remote repository".
-	ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
-
-	# An agent, not GIT_SSH_COMMAND. oe-core's BB_ENV_PASSTHROUGH_ADDITIONS carries
-	# SSH_AUTH_SOCK into bitbake but NOT GIT_SSH_COMMAND, so setting the latter
-	# looks load-bearing and reaches the fetcher never. This is the same mechanism
-	# build-local.sh gets from kas-container --ssh-agent.
-	eval "$(ssh-agent -s)" >/dev/null
-	ssh-add ~/.ssh/id_ed25519
-
-	# DO NOT expect this to work: SSH auth to GitHub does not succeed from a job.
-	# The same key, byte-identical (399 bytes, matching fingerprint), offered with
-	# IdentitiesOnly and no agent, authenticates from a laptop and is refused here:
-	#
-	#   Offering public key: /builder/.ssh/id_ed25519 ED25519 SHA256:2RTfYiDcEb...
-	#   git@github.com: Permission denied (publickey).
-	#
-	# Not interception -- the container sees github.com's real published host key
-	# (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU) on 140.82.114.3. Cause
-	# unknown, and deliberately not chased further, because microduck_daemon is
-	# now a *public* repo: bitbake's do_fetch fails on the ssh URL, falls through
-	# to oe-core's default MIRRORS rewrite to https, and succeeds anonymously.
-	#
-	# So this whole block is currently unnecessary. It is kept because it is
-	# correct, and if the repo goes private again it is the starting point -- but
-	# expect to need an https token rather than a key, given the above. A warning,
-	# not an exit: https already works, so refusing to build would be wrong.
-	if git ls-remote git@github.com:pollen-robotics/microduck_daemon.git >/dev/null 2>&1; then
-		echo "ssh: deploy key loaded, microduck_daemon reachable over ssh"
-	else
-		echo "WARNING: ssh auth to github failed; relying on the public https mirror"
-	fi
-fi
 
 # The RAUC signing pair, written where microduck-bundle.bb looks for it:
 # ${TOPDIR}/rauc-keys, and under kas TOPDIR is KAS_BUILD_DIR. Absent for an image

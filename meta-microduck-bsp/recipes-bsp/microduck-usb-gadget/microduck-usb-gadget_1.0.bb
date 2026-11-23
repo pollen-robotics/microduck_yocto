@@ -3,8 +3,8 @@ DESCRIPTION = "Turns the board's USB-C OTG port into a composite USB device: \
 a serial console (getty on ttyGS0) and an NCM network link with the robot at \
 192.168.42.1 handing the host a DHCP lease. A way in that needs neither the \
 radio nor the debug test pads -- the same USB-C cable the eMMC is flashed over."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = " \
     file://microduck-usb-gadget \

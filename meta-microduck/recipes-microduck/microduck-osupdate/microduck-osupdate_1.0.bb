@@ -3,8 +3,8 @@ DESCRIPTION = "Checks os/<machine>/<channel>.env in the public microduck-os buck
 downloads and verifies the bundle, installs it with rauc and reboots; reports the \
 outcome on the next boot. An HTTP API and page on 127.0.0.1:8090 (every interface \
 on the dev image). See the script."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = " \
     file://microduck-osupdate \
@@ -34,4 +34,5 @@ FILES:${PN} += "${systemd_system_unitdir}/microduck-osupdate@.service"
 # rauc to install, curl to fetch (with resume), flock/sha256sum from util-linux and
 # coreutils or busybox, systemd-run for the detached apply.
 # u-boot-fw-utils: fw_printenv, which apply reads BOOT_<slot>_LEFT with.
-RDEPENDS:${PN} = "rauc curl systemd util-linux-flock u-boot-fw-utils"
+# ca-certificates: the bundle is fetched over HTTPS; curl only RRECOMMENDS it.
+RDEPENDS:${PN} = "rauc curl systemd util-linux-flock u-boot-fw-utils ca-certificates"

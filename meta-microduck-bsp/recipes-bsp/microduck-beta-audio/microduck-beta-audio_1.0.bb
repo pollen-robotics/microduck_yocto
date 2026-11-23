@@ -2,8 +2,8 @@ SUMMARY = "Audio routing for the microduck beta board"
 DESCRIPTION = "Points ALSA's default PCM at the beta board's two cards (RK809 \
 codec for playback, face-board PDM mic for capture) and selects the codec's \
 speaker path at boot."
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = " \
     file://60-microduck-beta.conf \

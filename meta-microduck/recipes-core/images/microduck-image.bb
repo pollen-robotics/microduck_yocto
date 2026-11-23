@@ -1,11 +1,14 @@
 SUMMARY = "microduck robot OS"
-LICENSE = "MIT"
+LICENSE = "Apache-2.0"
 
 # The shipping image. Anything a robot must not carry, password-less root above
 # all, goes in microduck-image-dev.bb, which only ever adds to this one.
 require recipes-core/images/core-image-base.bb
 
 inherit rockchip-image extrausers
+
+# Overrides rockchip-image.bbclass's ?= single-rootfs layout.
+WKS_FILE = "microduck-ab.wks.in"
 
 # The operator account the daemon's tooling logs in as (duckctl ssh, dev-push.sh).
 # A shared password is acceptable only because ssh is on the head's USB-C link
@@ -55,6 +58,47 @@ microduck_build_id() {
 
 IMAGE_FEATURES += "ssh-server-openssh"
 
+# / stays read-only (`ro` in the DTB's bootargs); the dev image drops this and
+# remounts it rw. Writable state is on data or in RAM: docs/agents/rauc.md,
+# "Read-only rootfs".
+IMAGE_FEATURES += "read-only-rootfs"
+# :append, to run after oe-core's read_only_rootfs_hook (a +=, parsed later).
+ROOTFS_POSTPROCESS_COMMAND:append = " ${@bb.utils.contains('IMAGE_FEATURES', 'read-only-rootfs', 'microduck_read_only_rootfs', '', d)}"
+microduck_read_only_rootfs() {
+	fstab=${IMAGE_ROOTFS}${sysconfdir}/fstab
+	sed -i 's/,x-systemd\.growfs//' $fstab
+	grep -q '^/dev/root[[:space:]]\+/[[:space:]]\+auto[[:space:]]\+ro[[:space:]]' $fstab \
+		|| bbfatal "fstab's root line is not 'ro' after read_only_rootfs_hook"
+
+	# The daemon comes with the OS: a release's postinstall writes /etc and /usr,
+	# so updaterd could only fail. Pinned to the image's own, never polled for.
+	cfg=${IMAGE_ROOTFS}${sysconfdir}/robot/updater.toml
+	ver=$(readlink ${IMAGE_ROOTFS}/opt/robot/daemon/current)
+	ver=${ver#releases/}
+	sed -i -e '/^check_interval[[:space:]]*=/d' \
+		-e 's/^auto_apply[[:space:]]*=.*/auto_apply = "off"/' \
+		-e "/^\[component\.daemon\]\$/a pinned = \"$ver\"" $cfg
+	grep -qx 'auto_apply = "off"' $cfg && grep -qx "pinned = \"$ver\"" $cfg \
+		&& ! grep -q '^check_interval' $cfg \
+		|| bbfatal "updater.toml changed upstream; daemon updates not turned off"
+
+	# A flashed slot's machine-id is transient on a read-only /; commit it once.
+	# An installed slot gets the running one from the bundle hook instead.
+	# An empty Condition*= drops all of the unit's conditions: restore the one
+	# that limits it to a transient id, or / goes rw on every boot.
+	d=${IMAGE_ROOTFS}${sysconfdir}/systemd/system/systemd-machine-id-commit.service.d
+	install -d $d
+	cat > $d/microduck-read-only.conf <<-'EOF'
+		[Unit]
+		ConditionPathIsReadWrite=
+		ConditionPathIsMountPoint=${sysconfdir}/machine-id
+
+		[Service]
+		ExecStart=
+		ExecStart=/bin/sh -c 'mount -o remount,rw / && systemd-machine-id-setup --commit; r=$?; mount -o remount,ro /; exit $r'
+	EOF
+}
+
 # Only the GStreamer plugins mediad loads (packagegroup-microduck-media): each
 # set's -meta RDEPENDS on all ~190. The dev image keeps this so a gap shows there first.
 BAD_RECOMMENDATIONS += " \
@@ -65,7 +109,7 @@ BAD_RECOMMENDATIONS += " \
 
 # ssh on the head's USB-C link only; a machine without the gadget (Zero 3W)
 # would be left with no ssh at all.
-IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RRECOMMENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
+IMAGE_INSTALL:append = " ${@bb.utils.contains('MACHINE_EXTRA_RDEPENDS', 'microduck-usb-gadget', 'microduck-ssh-access', '', d)}"
 
 # An allowlist, so a new package cannot bring a setuid binary in unread. No
 # user runs the others (one operator, with sudo); root keeps them, minus the bit.
@@ -85,31 +129,29 @@ microduck_setuid_allowlist() {
 	done
 }
 
+# Only what the image chooses: a package that another one needs at runtime is that
+# package's RDEPENDS, not a line here (rauc, the media stack, aplay come that way).
 # padd: a shipping robot is driven with a gamepad.
-# alsa-utils-aplay: robotd plays every sound through `aplay`.
 # ldd: cargo-dist installers (rustypot-wizard's) read the glibc version with it.
 # MICRODUCK_RADIO_PACKAGES: per machine; BLE provisioning needs the attach unit.
 IMAGE_INSTALL:append = " \
-    microduck-hardening \
     microduck-daemon \
     microduck-daemon-padd \
     microduck-board \
-    rauc \
-    u-boot-rockchip-env \
     microduck-data \
-    microduck-osupdate \
-    packagegroup-microduck-media \
-    alsa-utils-aplay \
     ldd \
     rustypot-wizard \
     sudo \
-    kernel-modules \
-    ca-certificates \
-    networkmanager \
     ${MICRODUCK_RADIO_PACKAGES} \
     i2c-tools \
     htop \
 "
+
+# Not all 750 modules of radxa's defconfig (40 MB): what the robot needs is built in.
+# These two are all a running board loads besides its wifi driver (fq_codel is
+# systemd's default qdisc); a module that is not installed cannot be loaded at all.
+BAD_RECOMMENDATIONS += "kernel-modules"
+IMAGE_INSTALL:append = " kernel-module-sch-fq-codel kernel-module-nfnetlink"
 
 # The beta's face LEDs, ToF and NFC reader, for the daemons' groups (robot, nfcd).
 IMAGE_INSTALL:append:microduck-beta = " microduck-face-leds microduck-tof-spidev microduck-nfc"

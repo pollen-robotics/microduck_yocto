@@ -26,7 +26,7 @@ DEPENDS += "glib-2.0 gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI = "git://git@github.com/pollen-robotics/microduck_daemon.git;protocol=ssh;branch=main;name=daemon \
+SRC_URI = "git://github.com/pollen-robotics/microduck_daemon.git;protocol=https;branch=main;name=daemon \
            git://github.com/pollen-robotics/bmi088-rs;protocol=https;nobranch=1;name=bmi088;destsuffix=bmi088-rs \
            file://60-robot-i2c.rules \
            file://robotctl.bash_completion \
@@ -204,6 +204,10 @@ RDEPENDS:${PN} += "curl"
 RDEPENDS:${PN} += "coreutils"
 # mediad exits without webrtcsink; gstreamer1.0-rockchip carries the mpph264enc patch.
 RDEPENDS:${PN} += "gstreamer1.0-plugins-rs gstreamer1.0-rockchip"
+# The rest of mediad's elements, and media-ctl/v4l2-ctl. layer.conf: safe dep.
+RDEPENDS:${PN} += "packagegroup-microduck-media"
+# robotd plays sounds with aplay; pet-detect records with arecord (same package).
+RDEPENDS:${PN} += "alsa-utils-aplay"
 # No policy set: robotd is unhealthy and every update rolls back.
 RDEPENDS:${PN} += "microduck-policies"
 RDEPENDS:${PN} += "microduck-slot-health"

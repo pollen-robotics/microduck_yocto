@@ -3,13 +3,14 @@
 #
 #   scripts/test-hfjob-sstate.sh
 #
-# Runs the real in-container body (extracted from build-hfjob.sh) five times in
+# Runs the real in-container body (extracted from build-hfjob.sh) six times in
 # the kas image, against a tmpfs /cache and a fake `kas` that adds one sstate
 # object per "job". Checks the archive protocol: a legacy sstate.tar pair is
-# read and replaced, the pointer is followed, superseded archives go, a corrupt
-# one is refused, and the archive a concurrent reader started from survives the
-# next publish -- the race that cost two 35-minute reseeds. A sixth job with
-# SAVE_SSTATE=0 must read the cache and leave it alone.
+# read and replaced, the pointer is followed, an archive superseded over 30 min
+# ago goes, a corrupt one is refused, and a publisher that seeded from an older
+# archive leaves the one a concurrent reader took from the pointer -- the race
+# that cost 11 35-minute reseeds. A last job with SAVE_SSTATE=0 must read the
+# cache and leave it alone.
 set -u
 
 if [ ! -e /body.sh ]; then
@@ -49,24 +50,27 @@ check '[ "$(sha256sum /cache/sstate-$(cat /cache/sstate.current).tar | cut -d" "
 # 2. The pointer is followed; the archive the job seeded from is kept.
 j1sum=$(cat /cache/sstate.current)
 job j2
+j2sum=$(cat /cache/sstate.current)
 check 'grep -q "sha256 verified (/cache/sstate-$j1sum.tar)" /tmp/log-j2' "the next job seeds through the pointer"
 check 'current_has j1 && current_has j2' "its archive holds both jobs' objects"
 check '[ -f /cache/sstate-$j1sum.tar ] && [ "$(archives)" = 2 ]' "it keeps the archive it seeded from"
 
-# 3. The next publish drops the one before that.
+# 3. An archive superseded more than 30 min ago is dropped.
+touch -d '-2 hour' /cache/sstate-$j1sum.tar && touch -d '-1 hour' /cache/sstate-$j2sum.tar
 job j3
-check '[ ! -e /cache/sstate-$j1sum.tar ] && [ "$(archives)" = 2 ]' "superseded archives are dropped"
+check '[ ! -e /cache/sstate-$j1sum.tar ] && [ "$(archives)" = 2 ]' "archives superseded long ago are dropped"
 
 # 4. A corrupt archive is refused, never built on.
 echo garbage >> "/cache/sstate-$(cat /cache/sstate.current).tar"
 job j4
 check 'grep -q "WARNING: /cache/sstate-.* != " /tmp/log-j4 && grep -q reseeding /tmp/log-j4' "a corrupt archive is refused"
 
-# 5. A reader that took the old pointer while another job publishes still finds
-# its archive.
-before=$(cat /cache/sstate.current)
+# 5. The race seen on HF (#33g): P seeded from an older archive, Q published
+# since, R is reading Q's. P's publish must not delete it. j2 plays P's seed, j4 Q.
+older=$j2sum q=$(cat /cache/sstate.current)
+echo "$older" > /cache/sstate.current
 job j5
-check '[ -f /cache/sstate-$before.tar ]' "a concurrent reader's archive survives the next publish"
+check 'grep -q "sha256 verified (/cache/sstate-$older.tar)" /tmp/log-j5 && [ -f /cache/sstate-$q.tar ]' "an archive newer than the publisher's seed survives its publish"
 
 # 6. A branch job (SAVE_SSTATE=0) seeds from the cache but leaves it untouched.
 before=$(cat /cache/sstate.current) n=$(archives)

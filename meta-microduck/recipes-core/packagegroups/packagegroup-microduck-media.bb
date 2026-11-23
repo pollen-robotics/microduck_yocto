@@ -2,7 +2,7 @@ SUMMARY = "GStreamer with Rockchip hardware video codecs"
 DESCRIPTION = "The media stack mediad builds its pipelines from: GStreamer core and \
 plugins, the Rockchip MPP/RGA hardware codecs and their device permissions."
 
-LICENSE = "MIT"
+LICENSE = "Apache-2.0"
 
 # Before the inherit, or the group stays allarch and the build exits 1 on
 # rockchip-mpp's Debian renaming (docs/agents/media.md).
