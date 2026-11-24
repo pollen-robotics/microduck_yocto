@@ -135,69 +135,19 @@ python microduck_cargo_git_patch_paths() {
 do_configure[postfuncs] += "microduck_cargo_git_patch_paths"
 
 # GStreamer plugins are unversioned .so files inside a plugin directory, so they
-# belong in the runtime package and dev-so has to be skipped.
+# belong in the runtime package. Real files, not symlinks, so dev-so does not fire.
 PACKAGE_BEFORE_PN += "${PN}-tracers"
 FILES:${PN}-tracers = "${libdir}/gstreamer-1.0/libgstrstracers.so"
 FILES:${PN} += "${libdir}/gstreamer-1.0/*.so"
 FILES:${PN}-dev += "${libdir}/gstreamer-1.0/*.a"
-INSANE_SKIP:${PN} += "dev-so"
-INSANE_SKIP:${PN}-tracers += "dev-so"
 
 # webrtcsink builds a pipeline around webrtcbin at runtime; without this the plugin
 # loads and then fails at pipeline construction.
 RDEPENDS:${PN} += "gstreamer1.0-plugins-bad-webrtc"
 
-# The plugin compiles and links; do_package_qa then fails the build on
-#
-#   QA Issue: File /usr/lib/gstreamer-1.0/.debug/libgstrswebrtc.so in package
-#   gstreamer1.0-plugins-rs-dbg contains reference to TMPDIR [buildpaths]
-#
-# rust-common.bbclass passes --remap-path-prefix=${WORKDIR}=${TARGET_DBGSRC_DIR},
-# and everything this recipe compiles lives under WORKDIR -- the checkouts, the
-# vendored crates, both sysroots -- so something is embedding an absolute path by a
-# route that flag does not cover. microduck-daemon, a plain cargo build of
-# executables, does not trip it, so the suspect is cargo-c's own cdylib link or a
-# build script, not the git dependencies added here.
-#
-# Downgraded rather than skipped, and only for this recipe. What it protects is
-# build reproducibility, and the affected file is in the -dbg package, which no
-# microduck image installs -- IMAGE_FEATURES carries no dbg-pkgs, so this never
-# reaches a robot. Failing the whole image on it while the cause is unknown trades
-# a real feature for a property of a package we do not ship.
-#
-# The postfunc below is what makes this temporary: it prints the offending strings,
-# so the next build says which path and from where instead of just that one exists.
-ERROR_QA:remove = "buildpaths"
-WARN_QA:append = " buildpaths"
-
-python microduck_report_buildpaths() {
-    import os
-    import re
-
-    tmpdir = d.getVar("TMPDIR").encode()
-    pkgd = d.getVar("PKGD")
-    hits = set()
-
-    for dirpath, _, filenames in os.walk(pkgd):
-        for filename in filenames:
-            path = os.path.join(dirpath, filename)
-            if os.path.islink(path):
-                continue
-            try:
-                with open(path, "rb") as f:
-                    blob = f.read()
-            except (IOError, OSError):
-                continue
-            for match in re.finditer(re.escape(tmpdir) + b"[^\x00\n]{0,140}", blob):
-                hits.add((os.path.relpath(path, pkgd),
-                          match.group(0).decode("utf-8", "replace")))
-
-    for where, what in sorted(hits)[:25]:
-        bb.warn("buildpath in %s: %s" % (where, what))
-    if len(hits) > 25:
-        bb.warn("buildpath: %d more not shown" % (len(hits) - 25))
-}
-do_package[postfuncs] += "microduck_report_buildpaths"
+# [buildpaths]: crates' C (ring) in cargo_home is outside gcc's DEBUG_PREFIX_MAP.
+# Prepended, as gcc tries the last map first and ${S}/${B} must still win.
+DEBUG_PREFIX_MAP:prepend = "-ffile-prefix-map=${WORKDIR}=${TARGET_DBGSRC_DIR} "
 
 # After a SRCREV bump, regenerate crates.inc:
 #   ./scripts/build-local.sh shell -c "bitbake -c update_crates gstreamer1.0-plugins-rs"

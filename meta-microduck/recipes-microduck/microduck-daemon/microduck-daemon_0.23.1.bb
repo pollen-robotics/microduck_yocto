@@ -33,7 +33,7 @@ SRC_URI = "git://github.com/pollen-robotics/microduck_daemon.git;protocol=https;
            file://microduck-voice-bank.service \
 "
 # A release's source_revision, never main: set by scripts/bump-daemon.sh.
-SRCREV_daemon = "094d4bb4af31ec181156e1ea772437fdd7a55978"
+SRCREV_daemon = "93b26bbf2acf73babb53cd6b47e800d2661f54f4"
 # The commit under the v0.1.2 tag, not the tag object. name= must be the crate name.
 SRCREV_bmi088 = "bd113f317b14923f50f9a12a06678fe162b7fe06"
 SRCREV_FORMAT = "daemon_bmi088"
@@ -126,6 +126,9 @@ do_install:append() {
 	install -d ${D}${nonarch_base_libdir}/udev/rules.d
 	install -m 0644 ${UNPACKDIR}/60-robot-i2c.rules \
 		${D}${nonarch_base_libdir}/udev/rules.d/
+	# padd reads a Nintendo pad's battery on its hidraw node; hooks/postinstall installs this elsewhere.
+	install -m 0644 ${S}/padd/systemd/udev/70-robot-pad-hidraw.rules \
+		${D}${nonarch_base_libdir}/udev/rules.d/
 
 	install -d ${D}${sysconfdir}/robot
 	install -m 0644 ${S}/deploy/robotd.toml ${D}${sysconfdir}/robot/
@@ -161,7 +164,8 @@ CONFFILES:${PN} = "${sysconfdir}/robot/robotd.toml ${sysconfdir}/robot/updater.t
 
 PACKAGES =+ "${PN}-devkey ${PN}-bash-completion ${PN}-padd"
 
-FILES:${PN}-padd = "/opt/robot/daemon/releases/${PV}/bin/padd ${systemd_system_unitdir}/padd.service"
+FILES:${PN}-padd = "/opt/robot/daemon/releases/${PV}/bin/padd ${systemd_system_unitdir}/padd.service \
+    ${nonarch_base_libdir}/udev/rules.d/70-robot-pad-hidraw.rules"
 FILES:${PN}-bash-completion = "${datadir}/bash-completion"
 # The key and allow_dev_keys together: either alone is a board that refuses branch builds.
 FILES:${PN}-devkey = "${sysconfdir}/robot/trusted_keys/team.dev.pub"
