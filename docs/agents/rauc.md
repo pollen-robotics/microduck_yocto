@@ -501,7 +501,7 @@ watchdog with `RuntimeWatchdogSec=30s` (`meta-microduck-bsp/recipes-core/systemd
 Each of those reboots spends an attempt, so a slot on trial that never reaches
 `microduck-slot-health` falls back like one that fails it.
 
-`scripts/test-slot-trial.sh` runs every case (CI: `slot-health.yml`).
+`scripts/test-slot-trial.sh` runs every case (CI: `script-tests.yml`).
 
 ## What is not done
 

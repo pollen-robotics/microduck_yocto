@@ -27,7 +27,7 @@ daemon RDEPENDS on it), `nice` is libnice (through plugins-bad-webrtc),
 `rockchipmpp` is `gstreamer1.0-rockchip`. Two more that mediad creates only
 sometimes, so a measurement can miss them: `videoflip` (camera mounted
 rotated) and `videotestsrc` (no camera). Then add the plugin name to the list
-in `scripts/qemu-test.sh` too.
+in `tests/cukinia/cukinia.conf` too.
 
 ## Device permissions: `udev-conf-rockchip`
 
