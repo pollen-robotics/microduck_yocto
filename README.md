@@ -278,13 +278,54 @@ You do not need a Yocto tree to work on the robot's software:
 3. **Changing a recipe in the image**: `devtool modify <recipe>`,
    `devtool build`, `devtool deploy-target <recipe> root@<robot>`.
 
-Some things can be tested without a board. A container from the rootfs tarball
-(`zstd -dc ...rootfs.tar.zst | docker import - microduck-rootfs`, with
-`qemu-aarch64` binfmt) checks that binaries link and run. The kernel carries a
-`qemu-virt.cfg` fragment, so the exact kernel and rootfs that ship also boot
-under `qemu-system-aarch64 -M virt -cpu max`, which catches systemd ordering and
-network bring-up problems. U-Boot, the device tree, the radios and the motor bus
-need hardware.
+### Without a robot: the image under QEMU
+
+Every beta and face-board-v1 build deploys a `<image>.qemuboot.conf` beside its
+`.wic.zst` (`microduck-qemuboot.inc`), so oe-core's `runqemu` boots the image that
+ships, whole disk included, on QEMU's virt board. Put the conf, the `.wic.zst` and
+the `Image--*.bin` kernel from a build's artifact folder (the CI summary's
+`Artifacts:`) in one directory; you need `qemu-system-aarch64`, `zstd` and
+[`scripts/runqemu`](https://git.openembedded.org/openembedded-core/plain/scripts/runqemu?h=wrynose),
+one Python file. Or build `kas/qemu.yml` and use `kas shell`.
+
+```sh
+OECORE_NATIVE_SYSROOT=/ runqemu <image>.qemuboot.conf nographic slirp snapshot
+ssh -p 2222 root@127.0.0.1        # dev image; the shipping one is microduck/microduck
+```
+
+`snapshot` is required for a `.wic.zst` and drops every write when QEMU exits.
+The CPU is emulated: it boots in about 20 s on an x86 laptop, and a daemon's
+50 Hz loop keeps up.
+
+**Daemon work.** Build with `cargo board` in the daemon repo, copy the binary in,
+and point the unit at it with a drop-in under `/run`, which a reboot forgets:
+
+```sh
+scp -P 2222 target/aarch64-unknown-linux-gnu/release/robotd root@127.0.0.1:/root/
+ssh -p 2222 root@127.0.0.1
+mkdir -p /run/systemd/system/robotd.service.d
+printf '[Service]\nExecStart=\nExecStart=/root/robotd --socket /run/robotd.sock\n' \
+  > /run/systemd/system/robotd.service.d/dev.conf
+systemctl daemon-reload && systemctl restart robotd
+```
+
+**A body in MuJoCo.** Without one, `robotd` reports no robot on the motor bus. The
+daemon repo's simulator (`docs/robot/simulation.md`) serves a body over TCP, and
+the VM reaches the host as `10.0.2.2`. On the host, from `microduck_rl`:
+
+```sh
+uv run duck-body --port 7801 --keyframe SIT \
+  --scene src/mjlab_microduck/robot/microduck/scene_backlash.xml
+```
+
+Then in the VM add `--sim 10.0.2.2:7801` to `robotd`'s `ExecStart` as above (and
+`tofd --sim 10.0.2.2:7801` the same way), restart, and `robotctl robot enable`:
+the duck stands up, and `robotctl health` reads 50.0 of 50.0 Hz. Tools on the host
+reach the VM's robotd through `ssh -p 2222 -L /tmp/duck.sock:/run/robotd.sock`.
+
+What this does not cover: U-Boot and A/B slot switching (QEMU starts the kernel
+directly on rootfs_a), the radios, the camera, the NPU and the hardware encoder.
+Those need a board.
 
 ## Contributing
 

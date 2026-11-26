@@ -1,0 +1,11 @@
+# The face-board-v1 image for QEMU (microduck-qemu), booted with runqemu.
+#
+#   kas build kas/microduck.yml:kas/qemu.yml --target microduck-image-dev
+#   kas shell kas/microduck.yml:kas/qemu.yml -c 'bitbake qemu-helper-native && runqemu microduck-qemu microduck-image-dev nographic slirp snapshot'
+#
+# Composed last, like kas/beta.yml. For a job build,
+# `HFJOB_MACHINE=microduck-qemu scripts/build-hfjob.sh`.
+header:
+  version: 14
+
+machine: microduck-qemu
